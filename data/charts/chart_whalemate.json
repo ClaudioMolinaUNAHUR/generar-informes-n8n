@@ -1,0 +1,18 @@
+{
+  "simulations": {
+    "wm_sent": "Sent",
+    "wm_open": "Open",
+    "wm_clicked": "Clicked",
+    "wm_compromised": "Compromited"
+  },
+  "academy": {
+    "wm_learning_path": "Learning paths",
+    "wm_courses": "Courses",
+    "wm_cpvered_users": "Covered Users"
+  },
+  "soporte": {
+    "monitoreos": "Monitoreos Realizados",
+    "asistencias": "Capacitaciones/Asistencias",
+    "consultas": "Consultas Respondidas"
+  }
+}

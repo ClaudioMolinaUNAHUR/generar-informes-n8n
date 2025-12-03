@@ -1,0 +1,25 @@
+{
+  "transferencias": {
+    "ardid_tr_aprobadas": "Transf. Aprobadas",
+    "ardid_tr_apr_2fa": "Transf. Aprobadas 2FA",
+    "ardid_tr_rechazadas": "Transf. Rechazadas",
+    "ardid_tr_blocked": "Transf. Bloqueo"
+  },
+  "pagos": {
+    "ardid_py_aprobadas": "Pagos Aprobados",
+    "ardid_py_apr_2fa": "Pagos Aprobados 2FA",
+    "ardid_py_rechazadas": "Pagos Rechazados",
+    "ardid_py_blocked": "Pagos Bloqueo"
+  },
+  "login": {
+    "ardid_log_aprobadas": "Login Aprobados",
+    "ardid_log_apr_2fa": "Login Aprobados 2FA",
+    "ardid_log_rechazadas": "Login Rechazados",
+    "ardid_log_blocked": "Login Bloqueo"
+  },
+  "soporte": {
+    "monitoreos": "Monitoreos Realizados",
+    "asistencias": "Capacitaciones/Asistencias",
+    "consultas": "Consultas Respondidas"
+  }
+}

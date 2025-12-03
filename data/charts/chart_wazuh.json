@@ -1,0 +1,23 @@
+{
+  "alertas_severidad": {
+    "wazuh_alertas_criticas": "Alertas Críticas",
+    "wazuh_alertas_altas": "Alertas Altas",
+    "wazuh_alertas_medias": "Alertas Medias",
+    "wazuh_alertas_bajas": "Alertas Bajas"
+  },
+  "vulnerabilidades": {
+    "wazuh_vuln_totales": "Vulnerabilidades Totales"
+  },
+  "vulnerabilidades_criticidad": {
+    "wazuh_vuln_crit": "Vulnerabilidades Criticas",
+    "wazuh_vuln_alta": "Vulnerabilidades Altas",
+    "wazuh_vuln_media": "Vulnerabilidades Medias",
+    "wazuh_vuln_baja": "Vulnerabilidades Bajas"
+  },
+  "soporte": {
+    "wazuh_vuln_resuelt": "Vulnerabilidades Resueltas",
+    "wazuh_soporte": "Soporte",
+    "wazuh_solicitudes": "Solicitudes (configuración, integraciones, fuentes)",
+    "wazuh_consultas": "Consultas"
+  }
+}

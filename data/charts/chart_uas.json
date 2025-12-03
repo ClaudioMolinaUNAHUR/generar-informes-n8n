@@ -1,0 +1,22 @@
+{
+  "usuarios_especiales": {
+    "uas_acceso_especial": "Accesos especiales",
+    "uas_cambio_pass": "Cambios de contraseña especiales",
+    "uas_apertura_especial": "Aperturas automáticas",
+    "uas_recupero_pass": "Recupero especiales"
+  },
+  "mobile": {
+    "uas_mobile_cambio_pass": "Mobile -Cambio de contraseñs",
+    "uas_mobile_desbloqueo": "Mobile - Desbloqueo"
+  },
+  "usuarios_personales": {
+    "uas_autogestion": "Autogestión",
+    "uas_desbloqueo": "Desbloqueos",
+    "uas_solicitudes": "Solicitudes"
+  },
+  "soporte": {
+    "monitoreos": "Monitoreos Realizados",
+    "asistencias": "Capacitaciones/Asistencias",
+    "consultas": "Consultas Respondidas"
+  }
+}

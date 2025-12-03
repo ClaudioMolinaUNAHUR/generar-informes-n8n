@@ -1,0 +1,8 @@
+data.txt
+n8n.txt
+/data/pptx-parts/*
+/data/pdf-parts/*
+/data/base-pdf
+/data/generados/*
+/data/plantillas/*
+/postgres-data
