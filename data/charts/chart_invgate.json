@@ -1,21 +1,12 @@
 {
-  "pws": {
-    "bt_aperturas_cred": "PWS - Aperturas de credenciales",
-    "bt_rotacion": "PWS - Rotación credenciales",
-    "bt_autorizaciones": "PWS - autorizaciones",
-    "bt_credenciales": "PWS - Cantidad credenciales",
-    "bt_revisiones": "PWS - Revisión sesiones"
-  },
-  "pra": {
-    "bt_aperturas": "Vulnerabilidades Totales",
-    "bt_auth_pra": "PRA - Autorizaciones"
-  },
-  "rs": {
-    "bt_atenciones": "RS - Atenciones"
+  "service_desk": {
+    "inv_tec_funcional": "Tecnico Funcional",
+    "inv_spai": "SPAI",
+    "inv_sistemas": "SISTEMAS",
+    "inv_ti": "TI"
   },
   "soporte": {
     "monitoreos": "Monitoreos Realizados",
-    "asistencias": "Capacitaciones/Asistencias",
-    "consultas": "Consultas Respondidas"
+    "reu_asistencias": "Reuniones/Asistencias"
   }
 }

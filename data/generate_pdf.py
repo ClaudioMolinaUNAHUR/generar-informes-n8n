@@ -287,6 +287,7 @@ def add_charts(slide, charts, friendly_names, replacements_chart):
     for name in replacements_chart:
         for s in slide.shapes:
             if name == s.name:
+                print(s.name)
                 to_sort.append(s)
 
     chart_placeholders = sorted(
@@ -354,8 +355,8 @@ def generar_contenido(data, logo_stream):
         replacements_chart = [
             "Marcador de posición de imagen 6",
             "Marcador de posición de imagen 9",
-            "Marcador de posición de imagen 10",
             "Marcador de posición de imagen 11",
+            "Marcador de posición de imagen 10",
             "Marcador de posición de imagen 12",
         ]
         # Insertar gráficos

@@ -1,0 +1,21 @@
+{
+  "macro": {
+    "inv_qr_requests": "Consultas QR",
+    "inv_admin_requests": "Consultas administrativas",
+    "inv_tech_requests": "Consultas técnicas"
+  },
+  "comercio": {
+    "inv_ber": "BER",
+    "inv_bsc": "BSC",
+    "inv_bsj": "BSJ"
+  },
+  "asset": {
+    "inv_worlstation": "Workstation",
+    "inv_monitoreo": "Monitoreo"
+  },
+  "soporte": {
+    "monitoreos": "Monitoreos Realizados",
+    "reu_asistencias": "Reuniones/Asistencias",
+    "tickets_closed": "Tickets cerrados"
+  }
+}

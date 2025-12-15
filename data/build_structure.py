@@ -7,54 +7,6 @@ from datetime import datetime
 DATA_DIR = "/data"
 slide_info = ["resumen", "sugerencia", "sugerencia_version"]
 
-chart_uas = {
-    "usuarios_especiales": {
-        "uas_acceso_especial": "Accesos especiales",
-        "uas_cambio_pass": "Cambios de contraseña especiales",
-        "uas_apertura_especial": "Aperturas automáticas",
-        "uas_recupero_pass": "Recupero especiales",
-    },
-    "mobile": {
-        "uas_mobile_cambio_pass": "Mobile -Cambio de contraseñs",
-        "uas_mobile_desbloqueo": "Mobile - Desbloqueo",
-    },
-    "usuarios_personales": {
-        "uas_autogestion": "Autogestión",
-        "uas_desbloqueo": "Desbloqueos",
-        "uas_solicitudes": "Solicitudes",
-    },
-    "soporte": {
-        "consultas": "Consultas Respondidas",
-        "monitoreos": "Monitoreos Realizados",
-        "asistencias": "Capacitaciones/Asistencias",
-    },
-}
-
-chart_wazuh = {
-    "alertas_severidad": {
-        "wazuh_alertas_criticas": "Alertas Críticas",
-        "wazuh_alertas_altas": "Alertas Altas",
-        "wazuh_alertas_medias": "Alertas Medias",
-        "wazuh_alertas_bajas": "Alertas Bajas",
-    },
-    "vulnerabilidades": {
-        "wazuh_vuln_totales": "Vulnerabilidades Totales",
-    },
-    "vulnerabilidades_criticidad": {
-        "wazuh_vuln_crit": "Vulnerabilidades Criticas",
-        "wazuh_vuln_alta": "Vulnerabilidades Altas",
-        "wazuh_vuln_media": "Vulnerabilidades Medias",
-        "wazuh_vuln_baja": "Vulnerabilidades Bajas",
-    },
-    "soporte": {
-        "wazuh_vuln_resuelt": "Vulnerabilidades Resueltas",
-        "wazuh_soporte": "Soporte",
-        "wazuh_solicitudes": "Solicitudes (configuración, integraciones, fuentes)",
-        "wazuh_consultas": "Consultas",
-    },
-}
-
-
 def chart(values, name, build, kpis):
     total = 0
     for v in values:
@@ -73,7 +25,7 @@ def chart(values, name, build, kpis):
 
 def build_slide(product, product_name, chart_definitions, pointer_resume):
     build = {
-        "titulo": product_name.upper(),
+        "titulo": product_name.upper().split(".")[0],
         "kpis": "",
         "charts": {},
     }
@@ -161,6 +113,7 @@ def main():
             "uas": "plantilla_contenido.pptx",
             "wazuh": "plantilla_contenido_no_kpis.pptx",
             "ardid": "plantilla_contenido.pptx",
+            "invgate.asj": "plantilla_contenido_no_kpis.pptx",
             "invgate": "plantilla_contenido.pptx",
             "beyondtrust": "plantilla_contenido.pptx",
             "whalemate": "plantilla_contenido.pptx",

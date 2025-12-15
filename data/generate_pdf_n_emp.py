@@ -148,14 +148,11 @@ def set_placeholder_text(slide, idx, text):
     tf = tb.text_frame
     tf.text = text
 
-
 def create_composite_logo_from_base64_list(
     logos_base64_list: list[str],
+    target_height: int = 120,  # altura uniforme
 ) -> BytesIO | None:
-    """
-    Decodes a list of Base64 strings, stacks them vertically, and returns a BytesIO object
-    of the composite image.
-    """
+
     if not logos_base64_list:
         return None
 
@@ -164,30 +161,37 @@ def create_composite_logo_from_base64_list(
         img_stream = get_logo_from_base64(b64_string)
         if img_stream:
             try:
-                images.append(Image.open(img_stream))
+                img = Image.open(img_stream).convert("RGBA")
+
+                # 🔥 resize proporcional
+                ratio = target_height / img.height
+                new_width = int(img.width * ratio)
+                img = img.resize((new_width, target_height), Image.LANCZOS)
+
+                images.append(img)
             except Exception as e:
                 log(f"⚠️ Error opening image from stream: {e}")
 
     if not images:
         return None
 
-    # Calculate dimensions for the composite image
     max_width = max(img.width for img in images)
     total_height = sum(img.height for img in images)
 
-    # Create a new blank image with a transparent background
     composite_image = Image.new("RGBA", (max_width, total_height), (0, 0, 0, 0))
 
     y_offset = 0
     for img in images:
-        x_offset = (max_width - img.width) // 2  # Center each image horizontally
-        composite_image.paste(img, (x_offset, y_offset))
+        x_offset = (max_width - img.width) // 2
+        composite_image.paste(img, (x_offset, y_offset), img)
         y_offset += img.height
 
     output_stream = BytesIO()
-    composite_image.save(output_stream, format="PNG")  # PNG supports transparency
+    composite_image.save(output_stream, format="PNG")
     output_stream.seek(0)
+
     return output_stream
+
 
 
 # --------------------------------------------------------------

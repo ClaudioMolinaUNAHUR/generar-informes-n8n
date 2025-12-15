@@ -18,6 +18,6 @@
     "wazuh_vuln_resuelt": "Vulnerabilidades Resueltas",
     "wazuh_soporte": "Soporte",
     "wazuh_solicitudes": "Solicitudes (configuración, integraciones, fuentes)",
-    "wazuh_consultas": "Consultas"
+    "consultas": "Consultas"
   }
 }
