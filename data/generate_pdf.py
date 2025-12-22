@@ -287,7 +287,6 @@ def add_charts(slide, charts, friendly_names, replacements_chart):
     for name in replacements_chart:
         for s in slide.shapes:
             if name == s.name:
-                print(s.name)
                 to_sort.append(s)
 
     chart_placeholders = sorted(
@@ -438,13 +437,13 @@ def apply_background_to_pdf(content_pdf_path, background_pdf_path):
 # --------------------------------------------------------------
 # UNIR PDFs
 # --------------------------------------------------------------
-def unir_pdfs(pdf_paths, empresa):
+def unir_pdfs(pdf_paths, empresa, type="", split=0):
     writer = PdfWriter()
     for pdf_path in pdf_paths:
         reader = PdfReader(pdf_path)
         for page in reader.pages:
             writer.add_page(page)
-    out = f"{DATA_DIR}/generados/informe_{empresa}.pdf"
+    out = f"{DATA_DIR}/generados/informe_{empresa}{"." + type if split == 1 else ''}.pdf"
     with open(out, "wb") as f:
         writer.write(f)
     return out
@@ -457,18 +456,19 @@ def main():
     raw = sys.argv[1]
     data = json.loads(base64.b64decode(raw))
     data = data["data"]
+    split = data.get("split")
     logo_stream = get_logo_from_base64(data.get("logo_base64"))
 
     empresa = data.get("logo")[:-4].lower() if data.get("logo") else ""
 
     portada = None
     cierre = None
-    print(data["save"])
     if data["save"]:
         portada = generar_portada(data, logo_stream)
         cierre = generar_cierre(data, logo_stream)
     contenido_files = generar_contenido(data, logo_stream)
-
+    types = [slide.get("type", "") for slide in data.get("slides", [])]
+    
     # p1 = (convert_to_pdf(portada), "base_portada.pdf")
     # p2 = (convert_to_pdf(contenido), "base_contenido.pdf")
     # p3 = (convert_to_pdf(cierre), "base_cierre.pdf")
@@ -476,16 +476,26 @@ def main():
     pdf_files_to_merge = []
     if data["save"]:        
         pdf_files_to_merge = [convert_to_pdf(portada)]
-    pdf_files_to_merge.extend([convert_to_pdf(f) for f in contenido_files])
-    if data["save"]:        
-        pdf_files_to_merge.append(convert_to_pdf(cierre))
+    informe_name = []
+    if(split == 0):
+        pdf_files_to_merge.extend([convert_to_pdf(f) for f in contenido_files])
+        if data["save"]:        
+            pdf_files_to_merge.append(convert_to_pdf(cierre))
 
-    final_pdf = unir_pdfs(pdf_files_to_merge, empresa)
+        informe_name.append(unir_pdfs(pdf_files_to_merge, empresa))
+    else:
+        for idx, content_pptx in enumerate(contenido_files):  
+            pdf_files_to_merge.append(convert_to_pdf(content_pptx))
+            if data["save"]:        
+                pdf_files_to_merge.append(convert_to_pdf(cierre))
 
-    with open(final_pdf, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode()
+            informe_name.append( unir_pdfs(pdf_files_to_merge, empresa, types[idx], split))
+            # Aplicar fondo al PDF de contenido
 
-    # print(json.dumps({"file_name": "final.pdf", "file_base64": b64}))
+    # with open(final_pdf, "rb") as f:
+    #     b64 = base64.b64encode(f.read()).decode()
+
+    print(json.dumps({"file_names": informe_name }))
 
 
 if __name__ == "__main__":

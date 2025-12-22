@@ -2,10 +2,23 @@
 import sys
 import json
 import base64
-from datetime import datetime
+from datetime import datetime, timedelta
+import locale
 
 DATA_DIR = "/data"
 slide_info = ["resumen", "sugerencia", "sugerencia_version"]
+
+
+MESES_ES = {
+    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
+    5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
+    9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+}
+
+def formatea_mes_anio_es(dt: datetime) -> str:
+    """Devuelve 'Mes Año' en español (p. ej., 'Diciembre 2025')."""
+    return f"{MESES_ES.get(dt.month, 'Mes')} {dt.year}"
+
 
 def chart(values, name, build, kpis):
     total = 0
@@ -76,20 +89,49 @@ def main():
     products = data["products"]
 
     # Convertir la fecha_portada
+     
     fecha_iso = main.get("fecha_portada")
+
     if fecha_iso:
         try:
-            import locale
+            dt_object = None
 
-            locale.setlocale(locale.LC_TIME, "es_AR.UTF-8")
-
+            # 🟢 Caso 1: String 'YYYY-MM'
             if isinstance(fecha_iso, str):
-                dt_object = datetime.fromisoformat(fecha_iso.replace("Z", "+00:00"))
-                main["fecha_portada"] = dt_object.strftime("%B %Y").capitalize()
+                # Acepta 'YYYY-MM' y, por compatibilidad, ISO con día/hora
+                # Primero intentamos 'YYYY-MM'
+                try:
+                    dt_object = datetime.strptime(fecha_iso, "%Y-%m")
+                except ValueError:
+                    # Si viniera como 'YYYY-MM-DD...' (ISO), intentamos parseo estándar
+                    # Reemplazamos la Z por +00:00 si existiera
+                    try:
+                        dt_object = datetime.fromisoformat(fecha_iso.replace("Z", "+00:00"))
+                    except Exception:
+                        dt_object = None
+
+                # Normalizamos al primer día del mes si venía 'YYYY-MM'
+                if dt_object:
+                    dt_object = dt_object.replace(day=1)
+
+            # 🟢 Caso 2: Número de Excel (por si aparece)
+            elif isinstance(fecha_iso, (int, float)):
+                # Día base Excel (serial date): 1899-12-30
+                dt_object = datetime(1899, 12, 30) + timedelta(days=fecha_iso)
+                # Normalizamos al primer día del mes
+                dt_object = dt_object.replace(day=1)
+
+            # Salida final
+            if dt_object:
+                main["fecha_portada"] = formatea_mes_anio_es(dt_object)
             else:
                 main["fecha_portada"] = "Fecha no válida"
-        except (ValueError, locale.Error, AttributeError):
+
+        except Exception:
             main["fecha_portada"] = "Fecha no válida"
+
+    else:
+        main["fecha_portada"] = "Fecha no válida"
 
     parse_products = {}
     actual_product = ""

@@ -306,20 +306,20 @@ def main():
     input_data = json.loads(base64.b64decode(raw))
 
     main_data = input_data["main"]
-    informes_list = input_data.get("informes", [])
+    emp_codes = input_data.get("emp_codes", [])
     logos_base64_list = input_data.get("logos_base64", [])
 
     logo_stream = create_composite_logo_from_base64_list(logos_base64_list)
 
     empresa = ""
-    length_informes = len(informes_list)
-    for i, informe_name in enumerate(informes_list):
+    length_emp_codes = len(emp_codes)
+    for i, emp_code in enumerate(emp_codes):
         empresa += (
-            informe_name.split("_")[1] + "-"
-            if i != length_informes - 1
-            else informe_name.split("_")[1]
+            emp_code + "-"
+            if i != length_emp_codes - 1
+            else emp_code
         )
-
+    empresa = empresa.lower()
     portada_pptx_file = generar_portada(main_data, logo_stream)
     cierre_pptx_file = generar_cierre(main_data, logo_stream)
 
@@ -327,7 +327,7 @@ def main():
     pdf_files_to_merge.append(convert_to_pdf(portada_pptx_file))
 
     full_informes_paths = [
-        os.path.join(DATA_DIR, "generados", f"{f}.pdf") for f in informes_list
+        os.path.join(DATA_DIR, "generados", f"informe_{f.lower()}.pdf") for f in emp_codes
     ]
     pdf_files_to_merge.extend(full_informes_paths)
 
