@@ -57,15 +57,21 @@ def build_slide(product, product_name, chart_definitions, pointer_resume):
 
     # 3. Procesamos los datos en un único bucle optimizado.
     for semana in product:
-        if semana["Semana"] in slide_info:
+        semana_key = semana.get("Semana", "").strip()
+        if semana_key in slide_info:
             valor = semana.get(pointer_resume, "")
-            build[semana["Semana"]] = valor if valor != "null" else ""
-            if semana["Semana"] == "sugerencia_version":
+            build[semana_key] = valor if valor != "null" else ""
+            if semana_key == "sugerencia_version":
                 break
         else:
             for chart_name, series_def in chart_definitions.items():
                 for serie_name, json_key in series_def.items():
-                    chart_data[chart_name][serie_name].append(semana.get(json_key, 0))
+                    val = semana.get(json_key, 0)
+                    try:
+                        val = int(float(val))
+                    except (ValueError, TypeError):
+                        val = 0
+                    chart_data[chart_name][serie_name].append(val)
 
     # 4. Generamos los gráficos y los KPIs a partir de los datos recolectados.
     for chart_name, data in chart_data.items():

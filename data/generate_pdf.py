@@ -5,6 +5,7 @@ import base64
 import subprocess
 import os
 import warnings
+import uuid
 from pptx import Presentation
 from pptx.util import Inches, Pt
 import matplotlib.pyplot as plt
@@ -55,8 +56,8 @@ def replace_placeholders(slide, replacements):
 
                     # Reemplazar secuencias literales "\\n" por saltos de línea reales
                     # y también manejar escapes dobles si vienen.
-                    val_str = val_str.replace('\\n', '\n')
-                    val_str = val_str.replace('\\\n', '\n')
+                    val_str = val_str.replace("\\n", "\n")
+                    val_str = val_str.replace("\\\n", "\n")
 
                     # Asignar al cuadro de texto
                     shape.text = val_str
@@ -224,11 +225,15 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
 
         for idx, key in enumerate(series_keys):
             vals = list(chart_info.get(key) or [])
-            # normalizar longitud de vals
+            # Normalizar longitud de vals para que coincida con las etiquetas
             if len(vals) < len(labels):
                 vals = vals + [0] * (len(labels) - len(vals))
+            elif len(vals) > len(labels):
+                vals = vals[: len(labels)]
 
-            label_full = flat_friendly_names.get(key, key.replace("_", " ").capitalize())
+            label_full = flat_friendly_names.get(
+                key, key.replace("_", " ").capitalize()
+            )
             # Dividir etiquetas largas en varias líneas para que no encojan el gráfico
             label = textwrap.fill(label_full, width=22)
 
@@ -254,9 +259,14 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
     elif ctype == "line":
         for idx, key in enumerate(series_keys):
             vals = list(chart_info.get(key) or [])
+            # Normalizar longitud de vals para que coincida con las etiquetas
             if len(vals) < len(labels):
                 vals = vals + [None] * (len(labels) - len(vals))
-            label_full = flat_friendly_names.get(key, key.replace("_", " ").capitalize())
+            elif len(vals) > len(labels):
+                vals = vals[: len(labels)]
+            label_full = flat_friendly_names.get(
+                key, key.replace("_", " ").capitalize()
+            )
             # Dividir etiquetas largas en varias líneas
             label = textwrap.fill(label_full, width=22)
 
@@ -331,10 +341,14 @@ def generar_contenido(data, logo_stream):
         product_type = slide_item.get("type")
         friendly_names = {}
         try:
-            with open(f"{DATA_DIR}/charts/chart_{product_type}.json", "r", encoding="utf-8") as f:
+            with open(
+                f"{DATA_DIR}/charts/chart_{product_type}.json", "r", encoding="utf-8"
+            ) as f:
                 friendly_names = json.load(f)
         except FileNotFoundError:
-            log(f"⚠️  No se encontró el archivo de configuración de gráficos: chart_{product_type}.json")
+            log(
+                f"⚠️  No se encontró el archivo de configuración de gráficos: chart_{product_type}.json"
+            )
 
         # Diccionario de reemplazos
         replacements = {
@@ -347,7 +361,6 @@ def generar_contenido(data, logo_stream):
         }
         if product_type != "wazuh":
             replacements["{{ph_kpis}}"] = slide_content.get("kpis", "")
-
 
         # Reemplazar texto marcador
         replace_placeholders(slide, replacements)
@@ -399,10 +412,15 @@ def generar_cierre(data, logo_stream):
 # --------------------------------------------------------------
 def convert_to_pdf(pptx_file):
     output_dir = f"{DATA_DIR}/pdf-parts"
+    os.makedirs(output_dir, exist_ok=True)
     base_name = os.path.basename(pptx_file).replace(".pptx", ".pdf")
     pdf_file = os.path.join(output_dir, base_name)
+
+    # Usar un directorio de instalación único para evitar bloqueos y problemas de permisos
+    user_inst = f"-env:UserInstallation=file:///tmp/lo_{uuid.uuid4()}"
     cmd = [
         "libreoffice",
+        user_inst,
         "--headless",
         "--convert-to",
         "pdf",
@@ -410,8 +428,13 @@ def convert_to_pdf(pptx_file):
         "--outdir",
         output_dir,
     ]
-    subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    try:
+        subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+    except subprocess.CalledProcessError as e:
+        log(f"⚠️ Error en LibreOffice: {e.stderr.decode('utf-8', errors='replace')}")
+        raise
     return pdf_file
+
 
 def apply_background_to_pdf(content_pdf_path, background_pdf_path):
     """
@@ -443,7 +466,12 @@ def unir_pdfs(pdf_paths, empresa, type="", split=0):
         reader = PdfReader(pdf_path)
         for page in reader.pages:
             writer.add_page(page)
-    out = f"{DATA_DIR}/generados/informe_{empresa}{"." + type if split == 1 else ''}.pdf"
+    
+    output_dir = f"{DATA_DIR}/generados"
+    os.makedirs(output_dir, exist_ok=True)
+    out = (
+        f"{output_dir}/informe_{empresa}{'.' + type if split == 1 else ''}.pdf"
+    )
     with open(out, "wb") as f:
         writer.write(f)
     return out
@@ -468,34 +496,44 @@ def main():
         cierre = generar_cierre(data, logo_stream)
     contenido_files = generar_contenido(data, logo_stream)
     types = [slide.get("type", "") for slide in data.get("slides", [])]
-    
-    # p1 = (convert_to_pdf(portada), "base_portada.pdf")
-    # p2 = (convert_to_pdf(contenido), "base_contenido.pdf")
-    # p3 = (convert_to_pdf(cierre), "base_cierre.pdf")
-    # Convertir PPTX a PDF. Estos PDFs tendrán el contenido con fondo blanco.
-    pdf_files_to_merge = []
-    if data["save"]:        
-        pdf_files_to_merge = [convert_to_pdf(portada)]
+
+    # Pre-convert common parts to avoid redundant processing
+    portada_pdf = convert_to_pdf(portada) if (data["save"] and portada) else None
+    cierre_pdf = convert_to_pdf(cierre) if (data["save"] and cierre) else None
+
     informe_name = []
-    if(split == 0):
+    if split == 0:
+        pdf_files_to_merge = []
+        if portada_pdf:
+            pdf_files_to_merge.append(portada_pdf)
+        
         pdf_files_to_merge.extend([convert_to_pdf(f) for f in contenido_files])
-        if data["save"]:        
-            pdf_files_to_merge.append(convert_to_pdf(cierre))
+        
+        if cierre_pdf:
+            pdf_files_to_merge.append(cierre_pdf)
 
         informe_name.append(unir_pdfs(pdf_files_to_merge, empresa))
     else:
-        for idx, content_pptx in enumerate(contenido_files):  
+        for idx, content_pptx in enumerate(contenido_files):
+            
+            pdf_files_to_merge = []
+            if portada_pdf:
+                pdf_files_to_merge.append(portada_pdf)
+            
             pdf_files_to_merge.append(convert_to_pdf(content_pptx))
-            if data["save"]:        
-                pdf_files_to_merge.append(convert_to_pdf(cierre))
+            
+            if cierre_pdf:
+                pdf_files_to_merge.append(cierre_pdf)
 
-            informe_name.append( unir_pdfs(pdf_files_to_merge, empresa, types[idx], split))
+            informe_name.append(
+                unir_pdfs(pdf_files_to_merge, empresa, types[idx], split)
+            )
             # Aplicar fondo al PDF de contenido
 
     # with open(final_pdf, "rb") as f:
     #     b64 = base64.b64encode(f.read()).decode()
 
-    print(json.dumps({"file_names": informe_name }))
+    print(json.dumps({"file_names": informe_name}))
 
 
 if __name__ == "__main__":

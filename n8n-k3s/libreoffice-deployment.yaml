@@ -2,10 +2,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: n8n-deployment
+  name: libreoffice-deployment
   namespace: n8n-project
   labels: &labels
-    app: n8n
+    app: libreoffice
     component: deployment
 spec:
   replicas: 1
@@ -15,41 +15,38 @@ spec:
     metadata:
       labels: *labels
     spec:
+      securityContext:
+        fsGroup: 1000
       volumes:
       - name: n8n-data
         persistentVolumeClaim:
           claimName: n8n-pvc
       containers:
-      - name: n8n
-        image: docker.io/claudito16/n8n-python-pptx:v2.2
-        # image: n8nio/n8n:latest
+      - name: libreoffice
+        image: docker.io/claudito16/python-libreoffice-api:latest
         imagePullPolicy: IfNotPresent
         ports:
         - name: http
-          containerPort: 5678        
-        envFrom:
-        - configMapRef:
-            name: n8n-configmap
-        - secretRef:
-            name: n8n-secrets       
-        env:
-          - name: WEBHOOK_URL
-            value: "http://localhost:30227/"
+          containerPort: 8000
         volumeMounts:
         - name: n8n-data
           mountPath: /data
         livenessProbe:
           httpGet:
-            path: /healthz
-            port: 5678
+            path: /health
+            port: 8000
+          initialDelaySeconds: 10
+          periodSeconds: 10
         readinessProbe:
           httpGet:
-            path: /healthz
-            port: 5678
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
         resources:
           limits:
             cpu: "1.0"
             memory: "1024Mi"
           requests:
-            cpu: "0.5"
-            memory: "512Mi"
+            cpu: "0.2"
+            memory: "256Mi"
