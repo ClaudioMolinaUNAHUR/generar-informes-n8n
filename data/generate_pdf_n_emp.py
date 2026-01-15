@@ -148,6 +148,7 @@ def set_placeholder_text(slide, idx, text):
     tf = tb.text_frame
     tf.text = text
 
+
 def create_composite_logo_from_base64_list(
     logos_base64_list: list[str],
     target_height: int = 120,  # altura uniforme
@@ -191,7 +192,6 @@ def create_composite_logo_from_base64_list(
     output_stream.seek(0)
 
     return output_stream
-
 
 
 # --------------------------------------------------------------
@@ -314,11 +314,7 @@ def main():
     empresa = ""
     length_emp_codes = len(emp_codes)
     for i, emp_code in enumerate(emp_codes):
-        empresa += (
-            emp_code + "-"
-            if i != length_emp_codes - 1
-            else emp_code
-        )
+        empresa += emp_code + "-" if i != length_emp_codes - 1 else emp_code
     empresa = empresa.lower()
     portada_pptx_file = generar_portada(main_data, logo_stream)
     cierre_pptx_file = generar_cierre(main_data, logo_stream)
@@ -327,7 +323,8 @@ def main():
     pdf_files_to_merge.append(convert_to_pdf(portada_pptx_file))
 
     full_informes_paths = [
-        os.path.join(DATA_DIR, "generados", f"informe_{f.lower()}.pdf") for f in emp_codes
+        os.path.join(DATA_DIR, "generados", f"informe_{f.lower()}.pdf")
+        for f in emp_codes
     ]
     pdf_files_to_merge.extend(full_informes_paths)
 

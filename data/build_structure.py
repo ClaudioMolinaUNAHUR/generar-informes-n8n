@@ -10,10 +10,20 @@ slide_info = ["resumen", "sugerencia", "sugerencia_version"]
 
 
 MESES_ES = {
-    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
-    5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
-    9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+    1: "Enero",
+    2: "Febrero",
+    3: "Marzo",
+    4: "Abril",
+    5: "Mayo",
+    6: "Junio",
+    7: "Julio",
+    8: "Agosto",
+    9: "Septiembre",
+    10: "Octubre",
+    11: "Noviembre",
+    12: "Diciembre",
 }
+
 
 def formatea_mes_anio_es(dt: datetime) -> str:
     """Devuelve 'Mes Año' en español (p. ej., 'Diciembre 2025')."""
@@ -95,7 +105,7 @@ def main():
     products = data["products"]
 
     # Convertir la fecha_portada
-     
+
     fecha_iso = main.get("fecha_portada")
 
     if fecha_iso:
@@ -112,7 +122,9 @@ def main():
                     # Si viniera como 'YYYY-MM-DD...' (ISO), intentamos parseo estándar
                     # Reemplazamos la Z por +00:00 si existiera
                     try:
-                        dt_object = datetime.fromisoformat(fecha_iso.replace("Z", "+00:00"))
+                        dt_object = datetime.fromisoformat(
+                            fecha_iso.replace("Z", "+00:00")
+                        )
                     except Exception:
                         dt_object = None
 
@@ -151,7 +163,9 @@ def main():
     # agrego contenidos slide
     for product in parse_products:
         pointer_resumen = list(parse_products[product][0].keys())[1]
-        with open(f"{DATA_DIR}/charts/chart_{product}.json", "r", encoding="utf-8") as chart_file:
+        with open(
+            f"{DATA_DIR}/charts/chart_{product}.json", "r", encoding="utf-8"
+        ) as chart_file:
             chart = json.load(chart_file)
 
         slide_data = build_slide(

@@ -466,12 +466,10 @@ def unir_pdfs(pdf_paths, empresa, type="", split=0):
         reader = PdfReader(pdf_path)
         for page in reader.pages:
             writer.add_page(page)
-    
+
     output_dir = f"{DATA_DIR}/generados"
     os.makedirs(output_dir, exist_ok=True)
-    out = (
-        f"{output_dir}/informe_{empresa}{'.' + type if split == 1 else ''}.pdf"
-    )
+    out = f"{output_dir}/informe_{empresa}{'.' + type if split == 1 else ''}.pdf"
     with open(out, "wb") as f:
         writer.write(f)
     return out
@@ -506,22 +504,22 @@ def main():
         pdf_files_to_merge = []
         if portada_pdf:
             pdf_files_to_merge.append(portada_pdf)
-        
+
         pdf_files_to_merge.extend([convert_to_pdf(f) for f in contenido_files])
-        
+
         if cierre_pdf:
             pdf_files_to_merge.append(cierre_pdf)
 
         informe_name.append(unir_pdfs(pdf_files_to_merge, empresa))
     else:
         for idx, content_pptx in enumerate(contenido_files):
-            
+
             pdf_files_to_merge = []
             if portada_pdf:
                 pdf_files_to_merge.append(portada_pdf)
-            
+
             pdf_files_to_merge.append(convert_to_pdf(content_pptx))
-            
+
             if cierre_pdf:
                 pdf_files_to_merge.append(cierre_pdf)
 

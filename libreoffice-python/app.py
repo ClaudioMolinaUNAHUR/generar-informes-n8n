@@ -24,21 +24,34 @@ warnings.filterwarnings("ignore")
 DATA_DIR = "/data"
 app = FastAPI()
 
+
 # Modelos de datos
 class GenerateRequest(BaseModel):
     data: Dict[str, Any]
 
+
 MESES_ES = {
-    1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril",
-    5: "Mayo", 6: "Junio", 7: "Julio", 8: "Agosto",
-    9: "Septiembre", 10: "Octubre", 11: "Noviembre", 12: "Diciembre"
+    1: "Enero",
+    2: "Febrero",
+    3: "Marzo",
+    4: "Abril",
+    5: "Mayo",
+    6: "Junio",
+    7: "Julio",
+    8: "Agosto",
+    9: "Septiembre",
+    10: "Octubre",
+    11: "Noviembre",
+    12: "Diciembre",
 }
+
 
 # --------------------------------------------------------------
 # UTILS
 # --------------------------------------------------------------
 def log(msg):
     print(msg, flush=True)
+
 
 def get_logo_from_base64(base64_string: str) -> BytesIO | None:
     if not base64_string:
@@ -50,6 +63,7 @@ def get_logo_from_base64(base64_string: str) -> BytesIO | None:
         log("⚠️ Error de decodificación Base64.")
         return None
 
+
 def replace_placeholders(slide, replacements):
     for key, value in replacements.items():
         for shape in slide.shapes:
@@ -60,13 +74,17 @@ def replace_placeholders(slide, replacements):
                     val_str = val_str.replace("\\n", "\n").replace("\\\n", "\n")
                     shape.text = val_str
 
+
 def insert_image_scaled_by_width(slide, placeholder, image_path_or_stream):
     ph_left, ph_top = placeholder.left, placeholder.top
     ph_width, ph_height = placeholder.width, placeholder.height
     placeholder.element.getparent().remove(placeholder.element)
-    pic = slide.shapes.add_picture(image_path_or_stream, ph_left, ph_top, width=ph_width)
+    pic = slide.shapes.add_picture(
+        image_path_or_stream, ph_left, ph_top, width=ph_width
+    )
     new_height = pic.height
     pic.top = ph_top + (ph_height - new_height) // 2
+
 
 def insert_logo_preserving_aspect(slide, placeholder, logo_stream):
     ph_left, ph_top = placeholder.left, placeholder.top
@@ -82,6 +100,7 @@ def insert_logo_preserving_aspect(slide, placeholder, logo_stream):
     pic.left = ph_left + (ph_w - new_w) // 2
     pic.top = ph_top + (ph_h - new_h) // 2
 
+
 def _insert_logo_with_scaling(slide, logo_stream):
     LOGO_PLACEHOLDER_TYPE = 18
     if not logo_stream:
@@ -91,7 +110,10 @@ def _insert_logo_with_scaling(slide, logo_stream):
             insert_logo_preserving_aspect(slide, shape, logo_stream)
             break
 
-def create_composite_logo_from_base64_list(logos_base64_list: list[str], target_height: int = 120) -> BytesIO | None:
+
+def create_composite_logo_from_base64_list(
+    logos_base64_list: list[str], target_height: int = 120
+) -> BytesIO | None:
     if not logos_base64_list:
         return None
 
@@ -126,8 +148,10 @@ def create_composite_logo_from_base64_list(logos_base64_list: list[str], target_
     output_stream.seek(0)
     return output_stream
 
+
 def formatea_mes_anio_es(dt: datetime) -> str:
     return f"{MESES_ES.get(dt.month, 'Mes')} {dt.year}"
+
 
 # --------------------------------------------------------------
 # GRÁFICOS
@@ -144,13 +168,18 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
     labels = chart_info.get("labels", [])
     x = range(len(labels))
 
-    flat_friendly_names = {k: v for chart in friendly_names.values() for k, v in chart.items()}
+    flat_friendly_names = {
+        k: v for chart in friendly_names.values() for k, v in chart.items()
+    }
     palette = ["#4f81bd", "#9abb59", "#4bacc6", "#8064a2"]
 
     series_keys = []
     for key, val in chart_info.items():
-        if key in ("labels", "type", "title", "titulo"): continue
-        if isinstance(val, (list, tuple)) and all(isinstance(v, (int, float)) for v in val):
+        if key in ("labels", "type", "title", "titulo"):
+            continue
+        if isinstance(val, (list, tuple)) and all(
+            isinstance(v, (int, float)) for v in val
+        ):
             series_keys.append(key)
 
     if ctype == "bar":
@@ -161,55 +190,75 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
             bar_width = total_width / n
             for idx, key in enumerate(series_keys):
                 vals = list(chart_info.get(key) or [])
-                if len(vals) < len(labels): vals += [0] * (len(labels) - len(vals))
-                elif len(vals) > len(labels): vals = vals[:len(labels)]
-                
-                label_full = flat_friendly_names.get(key, key.replace("_", " ").capitalize())
+                if len(vals) < len(labels):
+                    vals += [0] * (len(labels) - len(vals))
+                elif len(vals) > len(labels):
+                    vals = vals[: len(labels)]
+
+                label_full = flat_friendly_names.get(
+                    key, key.replace("_", " ").capitalize()
+                )
                 label = textwrap.fill(label_full, width=22)
                 color = palette[idx % len(palette)]
                 offset = (idx - (n - 1) / 2) * bar_width
                 plt.bar(ind + offset, vals, bar_width * 0.95, label=label, color=color)
-            
+
             plt.xticks(ind, labels, rotation=0, fontsize=16)
             plt.grid(axis="y", linestyle="-", color="#dcdcdc", linewidth=0.8)
-            plt.legend(loc="center left", bbox_to_anchor=(1, 0.5), frameon=False, labelspacing=1.2, fontsize=18)
+            plt.legend(
+                loc="center left",
+                bbox_to_anchor=(1, 0.5),
+                frameon=False,
+                labelspacing=1.2,
+                fontsize=18,
+            )
 
     elif ctype == "line":
         for idx, key in enumerate(series_keys):
             vals = list(chart_info.get(key) or [])
-            if len(vals) < len(labels): vals += [None] * (len(labels) - len(vals))
-            elif len(vals) > len(labels): vals = vals[:len(labels)]
-            
-            label_full = flat_friendly_names.get(key, key.replace("_", " ").capitalize())
+            if len(vals) < len(labels):
+                vals += [None] * (len(labels) - len(vals))
+            elif len(vals) > len(labels):
+                vals = vals[: len(labels)]
+
+            label_full = flat_friendly_names.get(
+                key, key.replace("_", " ").capitalize()
+            )
             label = textwrap.fill(label_full, width=22)
             color = palette[idx % len(palette)]
             plt.plot(x, vals, label=label, marker="o", color=color)
-        
+
         plt.xticks(x, labels, rotation=45, fontsize=16)
         plt.grid(axis="y", linestyle="-", color="#dcdcdc", linewidth=0.8)
         plt.legend(loc="best", fontsize=18)
 
     try:
-        plt.gca().yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, pos: f"{int(x):,}"))
-    except Exception: pass
+        plt.gca().yaxis.set_major_formatter(
+            mtick.FuncFormatter(lambda x, pos: f"{int(x):,}")
+        )
+    except Exception:
+        pass
 
     plt.tight_layout(rect=[0, 0.03, 0.95, 0.97])
     plt.savefig(output_file, dpi=150, transparent=True)
     plt.close()
+
 
 def add_charts(slide, charts, friendly_names, replacements_chart):
     to_sort = [s for s in slide.shapes if s.name in replacements_chart]
     chart_placeholders = sorted(to_sort, key=lambda s: s.name)
 
     for i, (name, chart_info) in enumerate(charts.items()):
-        if i >= len(chart_placeholders): break
+        if i >= len(chart_placeholders):
+            break
         placeholder = chart_placeholders[i]
         if not chart_info.get("title") and not chart_info.get("titulo") and name:
             chart_info["title"] = name.replace("_", " ").capitalize()
-        
+
         fn = f"/tmp/{name}_{uuid.uuid4().hex}.png"
         create_matplotlib_chart(chart_info, friendly_names, fn)
         insert_image_scaled_by_width(slide, placeholder, fn)
+
 
 def chart_builder(values, name, build, kpis):
     total = 0
@@ -226,6 +275,7 @@ def chart_builder(values, name, build, kpis):
             **values,
         }
 
+
 def build_slide_structure(product, product_name, chart_definitions, pointer_resume):
     slide_info = ["resumen", "sugerencia", "sugerencia_version"]
     build = {
@@ -237,7 +287,11 @@ def build_slide_structure(product, product_name, chart_definitions, pointer_resu
         chart_name: {serie: [] for serie in series}
         for chart_name, series in chart_definitions.items()
     }
-    all_series = {serie: json_key for series in chart_definitions.values() for serie, json_key in series.items()}
+    all_series = {
+        serie: json_key
+        for series in chart_definitions.values()
+        for serie, json_key in series.items()
+    }
     kpis = {}
 
     for semana in product:
@@ -245,13 +299,16 @@ def build_slide_structure(product, product_name, chart_definitions, pointer_resu
         if semana_key in slide_info:
             valor = semana.get(pointer_resume, "")
             build[semana_key] = valor if valor != "null" else ""
-            if semana_key == "sugerencia_version": break
+            if semana_key == "sugerencia_version":
+                break
         else:
             for chart_name, series_def in chart_definitions.items():
                 for serie_name, json_key in series_def.items():
                     val = semana.get(json_key, 0)
-                    try: val = int(float(val))
-                    except (ValueError, TypeError): val = 0
+                    try:
+                        val = int(float(val))
+                    except (ValueError, TypeError):
+                        val = 0
                     chart_data[chart_name][serie_name].append(val)
 
     for chart_name, data in chart_data.items():
@@ -262,6 +319,7 @@ def build_slide_structure(product, product_name, chart_definitions, pointer_resu
         build["kpis"] += f"{nombre_amigable}: {total}\n"
 
     return build
+
 
 # --------------------------------------------------------------
 # GENERADORES
@@ -287,6 +345,7 @@ def generar_portada(data, logo_stream):
     output = f"{DATA_DIR}/pptx-parts/portada.pptx"
     prs.save(output)
     return output
+
 
 # CONTENIDO
 def generar_contenido(data, logo_stream):
@@ -349,7 +408,6 @@ def generar_contenido(data, logo_stream):
     return generated_files
 
 
-
 # CIERRE
 def generar_cierre(data, logo_stream):
     cierre = data["despedida"]
@@ -380,23 +438,26 @@ def convert_to_pdf(pptx_file):
     # Ejecución local de LibreOffice (ya estamos en el contenedor correcto)
     user_inst = f"-env:UserInstallation=file:///tmp/lo_{uuid.uuid4()}"
     cmd = [
-        "libreoffice", 
-        user_inst, 
-        "--headless", 
-        "--convert-to", 
-        "pdf", 
-        pptx_file, 
-        "--outdir", 
-        output_dir
+        "libreoffice",
+        user_inst,
+        "--headless",
+        "--convert-to",
+        "pdf",
+        pptx_file,
+        "--outdir",
+        output_dir,
     ]
-    
+
     try:
         subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
     except subprocess.CalledProcessError as e:
         log(f"⚠️ Error en LibreOffice: {e.stderr.decode('utf-8', errors='replace')}")
-        raise HTTPException(status_code=500, detail=f"LibreOffice error: {e.stderr.decode()}")
-    
+        raise HTTPException(
+            status_code=500, detail=f"LibreOffice error: {e.stderr.decode()}"
+        )
+
     return pdf_file
+
 
 def unir_pdfs(pdf_paths, empresa, type="", split=0):
     writer = PdfWriter()
@@ -404,15 +465,16 @@ def unir_pdfs(pdf_paths, empresa, type="", split=0):
         reader = PdfReader(pdf_path)
         for page in reader.pages:
             writer.add_page(page)
-    
+
     output_dir = f"{DATA_DIR}/generados"
     os.makedirs(output_dir, exist_ok=True)
     out_name = f"informe_{empresa}{'.' + type if split == 1 else ''}.pdf"
     out_path = f"{output_dir}/{out_name}"
-    
+
     with open(out_path, "wb") as f:
         writer.write(f)
     return out_path
+
 
 # --------------------------------------------------------------
 # ENDPOINT PRINCIPAL
@@ -447,22 +509,22 @@ async def generate_report(request: Request):
         pdf_files_to_merge = []
         if portada_pdf:
             pdf_files_to_merge.append(portada_pdf)
-        
+
         pdf_files_to_merge.extend([convert_to_pdf(f) for f in contenido_files])
-        
+
         if cierre_pdf:
             pdf_files_to_merge.append(cierre_pdf)
 
         informe_names.append(unir_pdfs(pdf_files_to_merge, empresa))
     else:
         for idx, content_pptx in enumerate(contenido_files):
-            
+
             pdf_files_to_merge = []
             if portada_pdf:
                 pdf_files_to_merge.append(portada_pdf)
-            
+
             pdf_files_to_merge.append(convert_to_pdf(content_pptx))
-            
+
             if cierre_pdf:
                 pdf_files_to_merge.append(cierre_pdf)
 
@@ -472,6 +534,7 @@ async def generate_report(request: Request):
 
     return {"file_names": informe_names}
 
+
 @app.post("/build-structure")
 async def build_structure(request: Request):
     try:
@@ -479,25 +542,34 @@ async def build_structure(request: Request):
         data = body.get("data", {})
         main = data.get("main", {})
         products = data.get("products", [])
-        
+
         # Procesar fecha portada
         fecha_iso = main.get("fecha_portada")
         if fecha_iso:
             try:
                 dt_object = None
                 if isinstance(fecha_iso, str):
-                    try: dt_object = datetime.strptime(fecha_iso, "%Y-%m")
+                    try:
+                        dt_object = datetime.strptime(fecha_iso, "%Y-%m")
                     except ValueError:
-                        try: dt_object = datetime.fromisoformat(fecha_iso.replace("Z", "+00:00"))
-                        except Exception: dt_object = None
-                    if dt_object: dt_object = dt_object.replace(day=1)
+                        try:
+                            dt_object = datetime.fromisoformat(
+                                fecha_iso.replace("Z", "+00:00")
+                            )
+                        except Exception:
+                            dt_object = None
+                    if dt_object:
+                        dt_object = dt_object.replace(day=1)
                 elif isinstance(fecha_iso, (int, float)):
                     dt_object = datetime(1899, 12, 30) + timedelta(days=fecha_iso)
                     dt_object = dt_object.replace(day=1)
-                
-                if dt_object: main["fecha_portada"] = formatea_mes_anio_es(dt_object)
-                else: main["fecha_portada"] = "Fecha no válida"
-            except Exception: main["fecha_portada"] = "Fecha no válida"
+
+                if dt_object:
+                    main["fecha_portada"] = formatea_mes_anio_es(dt_object)
+                else:
+                    main["fecha_portada"] = "Fecha no válida"
+            except Exception:
+                main["fecha_portada"] = "Fecha no válida"
         else:
             main["fecha_portada"] = "Fecha no válida"
 
@@ -511,8 +583,9 @@ async def build_structure(request: Request):
             parse_products[actual_product].append(product)
 
         # Construir slides
-        if "slides" not in main: main["slides"] = []
-        
+        if "slides" not in main:
+            main["slides"] = []
+
         file_slide_map = {
             "uas": "plantilla_contenido.pptx",
             "wazuh": "plantilla_contenido_no_kpis.pptx",
@@ -524,26 +597,39 @@ async def build_structure(request: Request):
         }
 
         for product_key in parse_products:
-            if not parse_products[product_key]: continue
+            if not parse_products[product_key]:
+                continue
             pointer_resumen = list(parse_products[product_key][0].keys())[1]
-            
+
             chart_def = {}
             try:
-                with open(f"{DATA_DIR}/charts/chart_{product_key}.json", "r", encoding="utf-8") as f:
+                with open(
+                    f"{DATA_DIR}/charts/chart_{product_key}.json", "r", encoding="utf-8"
+                ) as f:
                     chart_def = json.load(f)
-            except FileNotFoundError: pass
+            except FileNotFoundError:
+                pass
 
-            slide_data = build_slide_structure(parse_products[product_key], product_key, chart_def, pointer_resumen)
+            slide_data = build_slide_structure(
+                parse_products[product_key], product_key, chart_def, pointer_resumen
+            )
             if slide_data:
-                main["slides"].append({
-                    "type": product_key,
-                    "slide": slide_data,
-                    "file_slide": file_slide_map.get(product_key, "plantilla_contenido.pptx")
-                })
+                main["slides"].append(
+                    {
+                        "type": product_key,
+                        "slide": slide_data,
+                        "file_slide": file_slide_map.get(
+                            product_key, "plantilla_contenido.pptx"
+                        ),
+                    }
+                )
 
         return {"status": "ok", "output_file": main}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error building structure: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error building structure: {str(e)}"
+        )
+
 
 @app.post("/generate-n-emp")
 async def generate_pdf_n_emp(request: Request):
@@ -567,13 +653,21 @@ async def generate_pdf_n_emp(request: Request):
 
         # Unir todo
         pdf_files_to_merge = [portada_pdf]
-        pdf_files_to_merge.extend([os.path.join(DATA_DIR, "generados", f"informe_{f.lower()}.pdf") for f in emp_codes])
+        pdf_files_to_merge.extend(
+            [
+                os.path.join(DATA_DIR, "generados", f"informe_{f.lower()}.pdf")
+                for f in emp_codes
+            ]
+        )
         pdf_files_to_merge.append(cierre_pdf)
-        
+
         final_pdf = unir_pdfs(pdf_files_to_merge, empresa)
         return {"file_name": os.path.basename(f"informe_{empresa}")}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error generating PDF N Emp: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Error generating PDF N Emp: {str(e)}"
+        )
+
 
 @app.get("/health")
 def health():
