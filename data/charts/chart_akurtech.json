@@ -1,0 +1,25 @@
+{
+  "transferencias": {
+    "akurtech_tr_aprobadas": "Transf. Aprobadas",
+    "akurtech_tr_apr_2fa": "Transf. Aprobadas 2FA",
+    "akurtech_tr_rechazadas": "Transf. Rechazadas",
+    "akurtech_tr_blocked": "Transf. Bloqueo"
+  },
+  "pagos": {
+    "akurtech_py_aprobadas": "Pagos Aprobados",
+    "akurtech_py_apr_2fa": "Pagos Aprobados 2FA",
+    "akurtech_py_rechazadas": "Pagos Rechazados",
+    "akurtech_py_blocked": "Pagos Bloqueo"
+  },
+  "login": {
+    "akurtech_log_aprobadas": "Login Aprobados",
+    "akurtech_log_apr_2fa": "Login Aprobados 2FA",
+    "akurtech_log_rechazadas": "Login Rechazados",
+    "akurtech_log_blocked": "Login Bloqueo"
+  },
+  "soporte": {
+    "monitoreos": "Monitoreos Realizados",
+    "asistencias": "Capacitaciones/Asistencias",
+    "consultas": "Consultas Respondidas"
+  }
+}

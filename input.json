@@ -1,0 +1,75 @@
+{
+  "status": "ok",
+  "output_file": {
+    "save": true,
+    "titulo_portada": "",
+    "subtitulo_portada": "Reporte Mensual de Atenciones",
+    "fecha_portada": "Noviembre 2025",
+    "pie_l": "soporte@pentass.com",
+    "pie_r": "psscorp.tech",
+    "logo": "voii.png",
+    "logo_base64": "",
+    "slides": [
+      {
+        "type": "uas",
+        "slide": {
+          "titulo": "UAS",
+          "kpis": "Accesos especiales: 280\nCambios de contrase\u00f1a especiales: 196\nCapacitaciones/Asistencias: 1\nConsultas Respondidas: 1\n",
+          "charts": {
+            "usuarios_especiales": {
+              "type": "bar",
+              "labels": ["Semana 1", "Semana2", "Semana 3", "Semana 4"],
+              "uas_acceso_especial": [86, 77, 97, 20],
+              "uas_cambio_pass": [48, 29, 39, 80],
+              "uas_apertura_especial": [0, 0, 0, 0],
+              "uas_recupero_pass": [0, 0, 0, 0]
+            },
+            "soporte": {
+              "type": "bar",
+              "labels": ["Semana 1", "Semana2", "Semana 3", "Semana 4"],
+              "monitoreos": [0, 0, 0, 0],
+              "asistencias": [0, 0, 1, 0],
+              "consultas": [0, 0, 1, 0]
+            }
+          },
+          "resumen": "Versi\u00f3n de la herramienta: 2.68.1",
+          "sugerencia": "Se sugiere realizar una mayor utilizaci\u00f3n de aperturas autom\u00e1ticas y elevaci\u00f3n de privilegio.",
+          "sugerencia_version": ""
+        },
+        "file_slide": "plantilla_contenido.pptx"
+      },
+      {
+        "type": "whalemate",
+        "slide": {
+          "titulo": "WHALEMATE",
+          "kpis": "Courses: 3\nCovered Users: 67\nMonitoreos Realizados: 4\n",
+          "charts": {
+            "academy": {
+              "type": "bar",
+              "labels": ["Semana 1", "Semana2", "Semana 3", "Semana 4"],
+              "wm_learning_path": [0, 0, 0, 0],
+              "wm_courses": [2, 0, 0, 1],
+              "wm_cpvered_users": [2, 0, 0, 65]
+            },
+            "soporte": {
+              "type": "bar",
+              "labels": ["Semana 1", "Semana2", "Semana 3", "Semana 4"],
+              "monitoreos": [1, 1, 1, 1],
+              "asistencias": [0, 0, 0, 0],
+              "consultas": [0, 0, 0, 0]
+            }
+          },
+          "resumen": "Versi\u00f3n de la herramienta: 13.11.2025",
+          "sugerencia": "Se sugiere utilizar las trampas y los learning Paths.",
+          "sugerencia_version": ""
+        },
+        "file_slide": "plantilla_contenido.pptx"
+      }
+    ],
+    "despedida": {
+      "titulo": "Gracias por confiar en nosotros",
+      "pie_l": "soporte@pentass.com",
+      "pie_r": "psscorp.tech"
+    }
+  }
+}

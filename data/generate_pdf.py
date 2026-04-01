@@ -8,6 +8,7 @@ import warnings
 import uuid
 from pptx import Presentation
 from pptx.util import Inches, Pt
+from pptx.enum.text import PP_ALIGN
 import matplotlib.pyplot as plt
 from pypdf import PdfReader, PdfWriter
 import requests
@@ -41,26 +42,47 @@ def replace_placeholders(slide, replacements):
     """
     Busca un placeholder por su nombre (definido en el Panel de Selección de PowerPoint)
     y reemplaza su texto por el valor correspondiente.
+    Si el valor es una lista de objetos, aplica formato (ej. negritas) creando runs.
     """
-
+    
     for key, value in replacements.items():
         for shape in slide.shapes:
             if shape.has_text_frame:
                 texto = shape.text.strip()
                 if texto == key:
-                    # Asegurar que el valor es string
-                    if not isinstance(value, str):
-                        val_str = str(value)
+                    tf = shape.text_frame
+                    tf.clear()  # Limpiar el contenido existente
+
+                    if isinstance(value, list):
+                        # Procesar como array de objetos con formato
+                        for item in value:
+                            if not isinstance(item, dict):
+                                continue  # Saltar si no es dict
+                            text_part = item.get("text", "")
+                            if not tf.paragraphs:
+                                p = tf.add_paragraph()
+                            else:
+                                p = tf.paragraphs[-1]
+                            run = p.add_run()
+                            run.text = text_part
+                            if item.get("bold", False):
+                                run.font.bold = True
+                            # Aquí puedes agregar más formatos si es necesario, ej.:
+                            # if item.get("italic", False):
+                            #     run.font.italic = True
                     else:
-                        val_str = value
+                        # Tratar como string simple (comportamiento original)
+                        if not isinstance(value, str):
+                            val_str = str(value)
+                        else:
+                            val_str = value
+                        val_str = val_str.replace("\\n", "\n").replace("\\\n", "\n")
+                        tf.text = val_str
 
-                    # Reemplazar secuencias literales "\\n" por saltos de línea reales
-                    # y también manejar escapes dobles si vienen.
-                    val_str = val_str.replace("\\n", "\n")
-                    val_str = val_str.replace("\\\n", "\n")
-
-                    # Asignar al cuadro de texto
-                    shape.text = val_str
+                    # Justificar el texto cuando sea contenido de texto largo (resumen/KPIs)
+                    # Esto aplica al texto ya insertado y a cada párrafo existente.
+                    for p in tf.paragraphs:
+                        p.alignment = PP_ALIGN.JUSTIFY
 
 
 def insert_image_scaled_by_width(slide, placeholder, image_path_or_stream):
@@ -68,20 +90,19 @@ def insert_image_scaled_by_width(slide, placeholder, image_path_or_stream):
     Reemplaza un placeholder con una imagen, escalándola para que ocupe todo el ancho
     del placeholder y ajustando el alto proporcionalmente. La imagen se centra verticalmente.
     """
-    # 1. Obtener dimensiones y posición del placeholder
+    parent = placeholder.element.getparent()
+    if parent is None:
+        return  # ya fue eliminado, evitar crash
+
     ph_left, ph_top = placeholder.left, placeholder.top
     ph_width, ph_height = placeholder.width, placeholder.height
 
-    # 2. Eliminar el placeholder original para evitar duplicados
-    placeholder.element.getparent().remove(placeholder.element)
+    parent.remove(placeholder.element)
 
-    # 3. Insertar la imagen con el ancho del placeholder.
-    #    python-pptx ajustará automáticamente el alto para mantener la proporción.
     pic = slide.shapes.add_picture(
         image_path_or_stream, ph_left, ph_top, width=ph_width
     )
 
-    # 4. Centrar la imagen verticalmente en el espacio del placeholder original
     new_height = pic.height
     pic.top = ph_top + (ph_height - new_height) // 2
 
@@ -182,9 +203,9 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
     ctype = chart_info.get("type")
 
     # Título si viene en la definición del gráfico
-    title = chart_info.get("title") or chart_info.get("titulo") or ""
-    if title:
-        plt.title(title, fontsize=20, fontweight="bold", pad=20)
+    # title = chart_info.get("title") or chart_info.get("titulo") or ""
+    # if title:
+    #     plt.title(title, fontsize=20, fontweight="bold", pad=20)
 
     # Aumentar tamaño de fuente para los ejes
     plt.xticks(fontsize=18)
@@ -225,15 +246,11 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
 
         for idx, key in enumerate(series_keys):
             vals = list(chart_info.get(key) or [])
-            # Normalizar longitud de vals para que coincida con las etiquetas
+            # normalizar longitud de vals
             if len(vals) < len(labels):
                 vals = vals + [0] * (len(labels) - len(vals))
-            elif len(vals) > len(labels):
-                vals = vals[: len(labels)]
 
-            label_full = flat_friendly_names.get(
-                key, key.replace("_", " ").capitalize()
-            )
+            label_full = flat_friendly_names.get(key, key.replace("_", " ").capitalize())
             # Dividir etiquetas largas en varias líneas para que no encojan el gráfico
             label = textwrap.fill(label_full, width=22)
 
@@ -259,14 +276,9 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
     elif ctype == "line":
         for idx, key in enumerate(series_keys):
             vals = list(chart_info.get(key) or [])
-            # Normalizar longitud de vals para que coincida con las etiquetas
             if len(vals) < len(labels):
                 vals = vals + [None] * (len(labels) - len(vals))
-            elif len(vals) > len(labels):
-                vals = vals[: len(labels)]
-            label_full = flat_friendly_names.get(
-                key, key.replace("_", " ").capitalize()
-            )
+            label_full = flat_friendly_names.get(key, key.replace("_", " ").capitalize())
             # Dividir etiquetas largas en varias líneas
             label = textwrap.fill(label_full, width=22)
 
@@ -280,8 +292,12 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
     # Formato eje Y con separador de miles
     try:
         import matplotlib.ticker as mtick
-
         ax = plt.gca()
+        
+        # ESTA ES LA LÍNEA CLAVE: Fuerza a que los ticks sean solo números enteros
+        ax.yaxis.set_major_locator(mtick.MaxNLocator(integer=True))
+        
+        # Tu formateador actual
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, pos: f"{int(x):,}"))
     except Exception:
         pass
@@ -293,23 +309,26 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
 
 
 def add_charts(slide, charts, friendly_names, replacements_chart):
-    to_sort = []
-    for name in replacements_chart:
-        for s in slide.shapes:
-            if name == s.name:
-                to_sort.append(s)
+    # debug: enumera shape names y contenido para analizar placeholders y textos
+    # for shape in slide.shapes:
+    #     text = getattr(shape, "text", "")
+    #     log(
+    #         f"placeholder: '{shape.name}', type={shape.shape_type},"
+    #         f" pos=({shape.left},{shape.top}), size=({shape.width},{shape.height}), text='{text.strip()}'"
+    #     )
 
-    chart_placeholders = sorted(
-        to_sort,
-        key=lambda s: s.name,  # Ordenar por posición de izquierda a derecha
-    )
+    shape_map = {s.name: s for s in slide.shapes}
 
-    for i, (name, chart_info) in enumerate(charts.items()):
-        if i >= len(chart_placeholders):
-            break  # No hay más placeholders para gráficos
+    # Tomamos placeholders en el orden deseado de replacements_chart.
+    placeholder_candidates = [shape_map[name] for name in replacements_chart if name in shape_map]
 
-        placeholder = to_sort[i]
-        # Asegurar título por defecto basado en el nombre del gráfico
+    # Asegurar ordenando por posición visual (top, left) como fallback
+    placeholder_candidates = sorted(placeholder_candidates, key=lambda s: (s.top, s.left))
+
+    # Tomar solo los placeholders necesarios para los charts disponibles
+    chart_placeholders = placeholder_candidates[: len(charts)]
+
+    for (name, chart_info), placeholder in zip(charts.items(), chart_placeholders):
         if not chart_info.get("title") and not chart_info.get("titulo") and name:
             chart_info["title"] = name.replace("_", " ").capitalize()
 
@@ -328,12 +347,17 @@ def generar_contenido(data, logo_stream):
     slides_data = data.get("slides", [])
     generated_files = []
 
-    feet_l, feet_r = data.get("pie_l", ""), data.get("pie_r", "")
+    feet_l, feet_r, periodo = data.get("pie_l", ""), data.get("pie_r", ""), data.get("periodo", "")
 
     for i, slide_item in enumerate(slides_data):
         template_file = slide_item.get("file_slide", "plantilla_contenido.pptx")
+
+        prs_resume = Presentation(f"{DATA_DIR}/plantillas/resume_{template_file}")
         prs = Presentation(f"{DATA_DIR}/plantillas/{template_file}")
-        slide = prs.slides[0]  # Asumimos que la plantilla tiene una sola diapositiva
+
+        # Asumimos que la plantilla tiene una sola diapositiva
+        slide_resume = prs_resume.slides[0]
+        slide = prs.slides[0]  
 
         slide_content = slide_item.get("slide", {})
 
@@ -351,35 +375,55 @@ def generar_contenido(data, logo_stream):
             )
 
         # Diccionario de reemplazos
-        replacements = {
+        replacements_resume = {
             "{{ph_titulo}}": slide_content.get("titulo", ""),
             "{{ph_resumen}}": slide_content.get("resumen", ""),
-            "{{ph_sugerencia}}": slide_content.get("sugerencia", ""),
-            "{{ph_sugerencia_ver}}": slide_content.get("sugerencia_version", ""),
             "{{ph_pie_l}}": feet_l,
             "{{ph_pie_r}}": feet_r,
         }
-        if product_type != "wazuh":
-            replacements["{{ph_kpis}}"] = slide_content.get("kpis", "")
+        replacements = {
+            "{{ph_titulo}}": slide_content.get("titulo", ""),
+            "{{ph_periodo}}": periodo,
+            "{{ph_title_1}}": slide_content.get("title_1", ""),
+            "{{ph_kpis_1}}": slide_content.get("kpis_1", ""),
+            "{{ph_title_2}}": slide_content.get("title_2", ""),
+            "{{ph_kpis_2}}": slide_content.get("kpis_2", ""),
+            "{{ph_title_3}}": slide_content.get("title_3", ""),
+            "{{ph_kpis_3}}": slide_content.get("kpis_3", ""),
+            "{{ph_title_4}}": slide_content.get("title_4", ""),
+            "{{ph_kpis_4}}": slide_content.get("kpis_4", ""),
+            "{{ph_pie_l}}": feet_l,
+            "{{ph_pie_r}}": feet_r,
+        }
+        charts = slide_content.get("charts", {})
+        # if product_type != "wazuh" and charts:
+        #     replacements["{{ph_utilizacion}}"] = slide_content.get("kpi_title", "")
+        #     replacements["{{ph_kpis}}"] = slide_content.get("kpis", "")
+        #     replacements["{{ph_soporte}}"] = slide_content.get("soporte_title", "")
+        #     replacements["{{ph_soporte_kpis}}"] = slide_content.get("soporte_kpi", "")
 
         # Reemplazar texto marcador
+        replace_placeholders(slide_resume, replacements_resume)
         replace_placeholders(slide, replacements)
         replacements_chart = [
             "Marcador de posición de imagen 6",
-            "Marcador de posición de imagen 9",
-            "Marcador de posición de imagen 11",
-            "Marcador de posición de imagen 10",
-            "Marcador de posición de imagen 12",
+            "Marcador de posición de imagen 7",
+            "Marcador de posición de imagen 16",
+            "Marcador de posición de imagen 17",
+            "Marcador de posición de imagen 18",
         ]
         # Insertar gráficos
-        charts = slide_content.get("charts", {})
         if charts:
             add_charts(slide, charts, friendly_names, replacements_chart)
 
         _insert_logo_with_scaling(slide, logo_stream)
+        _insert_logo_with_scaling(slide_resume, logo_stream)
 
+        output_path_resume = f"{DATA_DIR}/pptx-parts/contenido_{product_type}_resume.pptx"
         output_path = f"{DATA_DIR}/pptx-parts/contenido_{product_type}.pptx"
+        prs_resume.save(output_path_resume)
         prs.save(output_path)
+        generated_files.append(output_path_resume)
         generated_files.append(output_path)
     return generated_files
 
@@ -481,7 +525,10 @@ def unir_pdfs(pdf_paths, empresa, type="", split=0):
 def main():
     raw = sys.argv[1]
     data = json.loads(base64.b64decode(raw))
+    # with open(f"{DATA_DIR}/input.json", "r", encoding="utf-8") as f:
+    #     data = json.load(f)
     data = data["data"]
+    
     split = data.get("split")
     logo_stream = get_logo_from_base64(data.get("logo_base64"))
 
