@@ -213,7 +213,7 @@ def insert_logo_preserving_aspect(slide, placeholder, logo_stream):
     pic.top = ph_top + (ph_h - new_h) // 2
 
 
-def _insert_logo_with_scaling(slide, logo_stream):
+def insert_logo_with_scaling(slide, logo_stream):
     """
     Busca el primer placeholder de tipo 'Picture' (18) e inserta el logo
     dentro de sus límites, manteniendo la relación de aspecto y eliminando el placeholder original.

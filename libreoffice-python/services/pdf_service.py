@@ -7,7 +7,7 @@ from pypdf import PdfReader, PdfWriter
 from utils.helpers import (
     DATA_DIR,
     log,
-    _insert_logo_with_scaling,
+    insert_logo_with_scaling,
     apply_text_formatting,
     normalize_kpi_text,
     normalize_suggestion_text,
@@ -16,7 +16,8 @@ from utils.helpers import (
 from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE
 from pptx.util import Pt
 import re
-from services.chart_service import create_matplotlib_chart
+from services.chart_service import create_matplotlib_chart, add_charts
+
 
 
 def replace_placeholders(slide, replacements):
@@ -117,21 +118,6 @@ def replace_placeholders(slide, replacements):
     return modified
 
 
-def add_charts(slide, charts, friendly_names, replacements_chart):
-    to_sort = [s for s in slide.shapes if s.name in replacements_chart]
-    chart_placeholders = sorted(to_sort, key=lambda s: s.name)
-
-    for i, (name, chart_info) in enumerate(charts.items()):
-        if i >= len(chart_placeholders):
-            break
-        placeholder = chart_placeholders[i]
-        if not chart_info.get("title") and not chart_info.get("titulo") and name:
-            chart_info["title"] = name.replace("_", " ").capitalize()
-
-        fn = f"/tmp/{name}_{uuid.uuid4().hex}.png"
-        create_matplotlib_chart(chart_info, friendly_names, fn)
-        insert_image_scaled_by_width(slide, placeholder, fn)
-
 
 def convert_to_pdf(pptx_file: str) -> str:
     output_dir = f"{DATA_DIR}/pdf-parts"
@@ -200,7 +186,7 @@ def generar_portada(data, logo_stream):
                         paragraph.alignment = PP_ALIGN.CENTER
 
     # Busca un placeholder de tipo imagen (18) para el logo
-    _insert_logo_with_scaling(slide, logo_stream)
+    insert_logo_with_scaling(slide, logo_stream)
 
     output = f"{DATA_DIR}/pptx-parts/portada.pptx"
     prs.save(output)
@@ -335,7 +321,7 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     if charts:
         add_charts(slide, charts, friendly_names, replacements_chart)
 
-    _insert_logo_with_scaling(slide, logo_stream)
+    insert_logo_with_scaling(slide, logo_stream)
 
     output_path = f"{DATA_DIR}/pptx-parts/contenido_{product_type}.pptx"
     prs.save(output_path)
@@ -395,7 +381,7 @@ def generar_slide_producto(
         else:
             apply_text_formatting(tf, font_name="Aptos", size=12)
 
-    _insert_logo_with_scaling(slide, logo_stream)
+    insert_logo_with_scaling(slide, logo_stream)
 
     output = f"{DATA_DIR}/pptx-parts/producto_{product_type}.pptx"
     prs.save(output)
@@ -424,7 +410,7 @@ def generar_cierre(data, logo_stream):
         else:
             apply_text_formatting(tf, font_name=None, size=12)
 
-    _insert_logo_with_scaling(slide, logo_stream)
+    insert_logo_with_scaling(slide, logo_stream)
 
     output = f"{DATA_DIR}/pptx-parts/cierre.pptx"
     prs.save(output)
@@ -456,7 +442,7 @@ def generar_buenas_practicas(data, logo_stream):
         if shape.has_text_frame and "BUENAS PRACTICAS" in shape.text.upper():
             apply_text_formatting(shape.text_frame, font_name="Calibri", size=18)
 
-    _insert_logo_with_scaling(slide, logo_stream)
+    insert_logo_with_scaling(slide, logo_stream)
 
     output = f"{DATA_DIR}/pptx-parts/buenas_practicas.pptx"
     prs.save(output)

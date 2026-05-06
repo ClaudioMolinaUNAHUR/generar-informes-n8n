@@ -115,7 +115,7 @@ def insert_logo_preserving_aspect(slide, placeholder, logo_stream):
     pic.top = ph_top + (ph_h - new_h) // 2
 
 
-def _insert_logo_with_scaling(slide, logo_stream):
+def insert_logo_with_scaling(slide, logo_stream):
     """
     Busca el primer placeholder de tipo 'Picture' (18) e inserta el logo
     dentro de sus límites, manteniendo la relación de aspecto y eliminando el placeholder original.
@@ -212,7 +212,7 @@ def generar_portada(data, logo_stream):
     replace_placeholders(slide, replacements)
 
     # Busca un placeholder de tipo imagen (18) para el logo.
-    _insert_logo_with_scaling(slide, logo_stream)
+    insert_logo_with_scaling(slide, logo_stream)
 
     output = f"{DATA_DIR}/pptx-parts/portada.pptx"
     prs.save(output)
@@ -235,7 +235,7 @@ def generar_cierre(data, logo_stream):
 
     replace_placeholders(slide, replacements)
 
-    _insert_logo_with_scaling(slide, logo_stream)
+    insert_logo_with_scaling(slide, logo_stream)
 
     output = f"{DATA_DIR}/pptx-parts/cierre.pptx"
     prs.save(output)

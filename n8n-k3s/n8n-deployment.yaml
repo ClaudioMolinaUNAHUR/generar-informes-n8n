@@ -26,7 +26,7 @@ spec:
       - name: n8n
         # image: docker.io/claudito16/n8n-python-pptx:v2.2
         image: n8nio/n8n:latest
-        imagePullPolicy: IfNotPresent
+        imagePullPolicy: Always
         ports:
         - name: http
           containerPort: 5678        
@@ -35,9 +35,11 @@ spec:
             name: n8n-configmap
         - secretRef:
             name: n8n-secrets       
-        env:
-          - name: WEBHOOK_URL
-            value: "http://localhost:30227/"
+        env: # Variables de entorno para n8n
+          - name: WEBHOOK_URL # Mantener tu configuración existente de webhook
+            value: "http://localhost:30227/" 
+          - name: N8N_PYTHON_TASK_RUNNER_URL # Configurar el runner externo de Python
+            value: "http://libreoffice-svc.n8n-project.svc.cluster.local:80"
         volumeMounts:
         - name: n8n-data
           mountPath: /data
