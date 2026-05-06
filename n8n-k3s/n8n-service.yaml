@@ -17,3 +17,4 @@ spec:
     name: http
     port: 80
     targetPort: 5678
+    nodePort: 30227

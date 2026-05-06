@@ -15,14 +15,17 @@ spec:
     metadata:
       labels: *labels
     spec:
+      securityContext:
+        runAsUser: 1000
+        fsGroup: 1000
       volumes:
       - name: n8n-data
         persistentVolumeClaim:
           claimName: n8n-pvc
       containers:
       - name: n8n
-        image: docker.io/claudito16/n8n-python-pptx:v2.2
-        # image: n8nio/n8n:latest
+        # image: docker.io/claudito16/n8n-python-pptx:v2.2
+        image: n8nio/n8n:latest
         imagePullPolicy: IfNotPresent
         ports:
         - name: http

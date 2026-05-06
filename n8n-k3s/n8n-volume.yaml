@@ -3,7 +3,6 @@ apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: n8n-pv
-  namespace: n8n-project
 spec:
   capacity:
     storage: 1Gi
@@ -14,12 +13,14 @@ spec:
   storageClassName: manual
   hostPath:
     path: "/mnt/c/Users/cmolina/Desktop/varios/k8s-n8n/data"
+  claimRef:
+    name: n8n-pvc
+    namespace: n8n-project
 ---
 apiVersion: v1
 kind: PersistentVolume
 metadata:
   name: postgres-pv
-  namespace: n8n-project
 spec:
   capacity:
     storage: 1Gi
@@ -30,6 +31,9 @@ spec:
   storageClassName: manual
   hostPath:
     path: "/mnt/c/Users/cmolina/Desktop/varios/k8s-n8n/postgres-data"
+  claimRef:
+    name: postgres-data-postgres-statefulset-0
+    namespace: n8n-project
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

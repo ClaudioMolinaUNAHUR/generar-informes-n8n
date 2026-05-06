@@ -16,21 +16,26 @@ spec:
       labels: *labels
     spec:
       securityContext:
+        runAsUser: 1000
         fsGroup: 1000
       volumes:
       - name: n8n-data
         persistentVolumeClaim:
           claimName: n8n-pvc
+      - name: tmp-volume
+        emptyDir: {}
       containers:
       - name: libreoffice
-        image: docker.io/claudito16/python-libreoffice-api:latest
-        imagePullPolicy: IfNotPresent
+        image: docker.io/claudito16/ubuntu-libreoffice-python:latest
+        imagePullPolicy: Always
         ports:
         - name: http
           containerPort: 8000
         volumeMounts:
         - name: n8n-data
           mountPath: /data
+        - name: tmp-volume
+          mountPath: /tmp
         livenessProbe:
           httpGet:
             path: /health
