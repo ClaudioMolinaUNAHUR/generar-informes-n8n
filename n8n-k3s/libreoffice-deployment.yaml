@@ -22,11 +22,14 @@ spec:
       - name: n8n-data
         persistentVolumeClaim:
           claimName: n8n-pvc
+      - name: app-code
+        persistentVolumeClaim:
+          claimName: libreoffice-code-pvc
       - name: tmp-volume
         emptyDir: {}
       containers:
       - name: libreoffice
-        image: docker.io/claudito16/ubuntu-libreoffice-python:latest
+        image: docker.io/claudito16/api-libreoffice-python:latest
         imagePullPolicy: Always
         ports:
         - name: http
@@ -34,6 +37,8 @@ spec:
         volumeMounts:
         - name: n8n-data
           mountPath: /data
+        - name: app-code
+          mountPath: /app
         - name: tmp-volume
           mountPath: /tmp
         livenessProbe:
