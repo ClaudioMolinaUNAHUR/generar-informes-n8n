@@ -41,22 +41,30 @@ spec:
           mountPath: /app
         - name: tmp-volume
           mountPath: /tmp
+        startupProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          failureThreshold: 30
+          periodSeconds: 10
         livenessProbe:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 10
-          periodSeconds: 10
+          initialDelaySeconds: 15
+          periodSeconds: 20
+          timeoutSeconds: 5
         readinessProbe:
           httpGet:
             path: /health
             port: 8000
           initialDelaySeconds: 5
-          periodSeconds: 5
+          periodSeconds: 10
+          timeoutSeconds: 5
         resources:
           limits:
             cpu: "1.0"
             memory: "1024Mi"
           requests:
-            cpu: "0.2"
-            memory: "256Mi"
+            cpu: "0.5"
+            memory: "512Mi"

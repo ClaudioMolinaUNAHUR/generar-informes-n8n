@@ -176,12 +176,28 @@ def insert_image_scaled_by_width(slide, placeholder, image_path_or_stream):
 
     parent.remove(placeholder.element)
 
-    pic = slide.shapes.add_picture(
-        image_path_or_stream, ph_left, ph_top, width=ph_width
+    log(
+        f"DEBUG: insert_image_scaled_by_width - placeholder '{placeholder.name}' dims=({ph_width},{ph_height}) pos=({ph_left},{ph_top})"
+    )
+    pic = slide.shapes.add_picture(image_path_or_stream, ph_left, ph_top, width=ph_width)
+    log(
+        f"DEBUG: insert_image_scaled_by_width - picture inserted dims=({pic.width},{pic.height}) pos=({pic.left},{pic.top})"
     )
 
-    new_height = pic.height
-    pic.top = ph_top + (ph_height - new_height) // 2
+    # Ajustar la imagen para que encaje dentro del placeholder sin desbordar.
+    if pic.height > ph_height:
+        scale = ph_height / pic.height
+        pic.width = int(pic.width * scale)
+        pic.height = int(pic.height * scale)
+        log(
+            f"DEBUG: insert_image_scaled_by_width - picture redimensionada a dims=({pic.width},{pic.height}) para caber en el placeholder"
+        )
+
+    pic.left = ph_left + max(0, (ph_width - pic.width) // 2)
+    pic.top = ph_top + max(0, (ph_height - pic.height) // 2)
+    log(
+        f"DEBUG: insert_image_scaled_by_width - picture centered pos=({pic.left},{pic.top})"
+    )
 
 
 def insert_logo_preserving_aspect(slide, placeholder, logo_stream):
@@ -215,17 +231,25 @@ def insert_logo_preserving_aspect(slide, placeholder, logo_stream):
 
 def insert_logo_with_scaling(slide, logo_stream):
     """
-    Busca el primer placeholder de tipo 'Picture' (18) e inserta el logo
-    dentro de sus límites, manteniendo la relación de aspecto y eliminando el placeholder original.
+    Busca un shape que contenga el texto "{{ph_logo}}" e inserta el logo en su lugar,
+    manteniendo la relación de aspecto y eliminando el shape original.
     """
-    # 18 es el tipo de placeholder para 'Picture'
-    LOGO_PLACEHOLDER_TYPE = 18
-
     if not logo_stream:
-        return
+        log("DEBUG: insert_logo_with_scaling - no logo_stream recibido, se omite inserción de logo")
+        return False
 
-    for shape in slide.placeholders:
-        if shape.placeholder_format.type == LOGO_PLACEHOLDER_TYPE:
-
+    found = False
+    for shape in slide.shapes:
+        if shape.has_text_frame and "{{ph_logo}}" in shape.text:
+            log(
+                f"DEBUG: insert_logo_with_scaling - encontrado placeholder '{{ph_logo}}' en shape '{shape.name}' con texto '{shape.text.strip()}'"
+            )
+            if hasattr(logo_stream, "seek"):
+                logo_stream.seek(0)
             insert_logo_preserving_aspect(slide, shape, logo_stream)
+            found = True
             break  # Solo insertamos el primer logo que encontremos
+
+    if not found:
+        log("DEBUG: insert_logo_with_scaling - no se encontró ningún placeholder '{{ph_logo}}' en esta diapositiva")
+    return found

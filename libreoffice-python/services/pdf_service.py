@@ -2,6 +2,7 @@ import os
 import json
 import uuid
 import subprocess
+import shutil
 from pptx import Presentation
 from pypdf import PdfReader, PdfWriter
 from utils.helpers import (
@@ -19,101 +20,230 @@ import re
 from services.chart_service import create_matplotlib_chart, add_charts
 
 
+def _prepare_output_file(path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        os.remove(path)
+
+
+
 
 def replace_placeholders(slide, replacements):
     """
-    Busca un placeholder por su nombre (definido en el Panel de Selección de PowerPoint)
-    y reemplaza su texto por el valor correspondiente.
-    Si el valor es una lista de objetos, aplica formato (ej. negritas) creando runs.
-    Retorna una lista de tuplas (text_frame, key) modificados.
+    Busca placeholders en los text_frames de la slide y los reemplaza.
+
+    Mejoras:
+    - Reemplazo robusto a nivel XML: reconstruye el texto completo del párrafo
+      concatenando todos sus runs antes de buscar placeholders, evitando fallos
+      cuando un placeholder está partido entre varios runs.
+    - Negrita automática: en bloques de texto plano, cualquier fragmento que
+      precede a ':' dentro de una línea se renderiza en negrita (ej. "Módulo: texto").
+    - Limpieza de placeholders no resueltos: elimina párrafos completos cuyo
+      texto sea únicamente un placeholder sin valor asignado, en lugar de dejar
+      la línea vacía o con el token visible.
     """
+    from pptx.oxml.ns import qn
+    from lxml import etree
+    import copy
+
     modified = []
+    unresolved_pattern = re.compile(r"\{\{ph_[^}]+\}\}")
 
     def _value_to_text(value):
         if isinstance(value, list):
-            parts = []
-            for item in value:
-                if isinstance(item, dict):
-                    parts.append(str(item.get("text", "")))
-                else:
-                    parts.append(str(item))
-            return "".join(parts)
-        if isinstance(value, str):
-            return value
-        return str(value)
+            return "".join(
+                str(item.get("text", "")) if isinstance(item, dict) else str(item)
+                for item in value
+            )
+        return str(value) if value is not None else ""
 
-    # 1) Reemplazo exacto: mantiene compatibilidad con placeholders que ocupan todo el cuadro.
-    for key, value in replacements.items():
-        for shape in slide.shapes:
-            if not shape.has_text_frame:
-                continue
+    def _rebuild_para_text(para):
+        """Devuelve el texto completo del párrafo uniendo todos sus runs."""
+        return "".join(run.text or "" for run in para.runs)
 
-            texto = shape.text.strip()
-            if texto == key:
-                tf = shape.text_frame
-                tf.clear()  # Limpiar el contenido existente
+    def _set_para_with_bold_labels(para, text, base_font_size=None, base_font_name=None):
+        """
+        Reemplaza el contenido de un párrafo con soporte de negrita automática.
+        Si la línea tiene el patrón 'Etiqueta: resto', pone 'Etiqueta:' en negrita.
+        Respeta saltos de línea (\n) creando nuevos párrafos en el text_frame padre.
+        Retorna lista de párrafos adicionales creados (para alineación posterior).
+        """
+        p_elem = para._p
+        tf = para._p.getparent()
 
-                if isinstance(value, list):
-                    # Procesar como array de objetos con formato
-                    for item in value:
-                        if not isinstance(item, dict):
-                            continue  # Saltar si no es dict
-                        text_part = item.get("text", "")
-                        if not tf.paragraphs:
-                            p = tf.add_paragraph()
-                        else:
-                            p = tf.paragraphs[-1]
-                        run = p.add_run()
-                        run.text = text_part
-                        if item.get("bold", False):
-                            run.font.bold = True
-                        # Aquí puedes agregar más formatos si es necesario, ej.:
-                        # if item.get("italic", False):
-                        #     run.font.italic = True
-                else:
-                    val_str = _value_to_text(value)
-                    val_str = val_str.replace("\\n", "\n").replace("\\\n", "\n")
-                    tf.text = val_str
+        # Limpiar runs existentes del párrafo
+        for r in p_elem.findall(qn("a:r")):
+            p_elem.remove(r)
 
-                for p in tf.paragraphs:
-                    p.alignment = PP_ALIGN.JUSTIFY
+        lines = text.split("\n")
+        extra_paras = []
 
-                modified.append((tf, key))
+        def _add_run_to_p(p_el, run_text, bold=False, font_size=None, font_name=None):
+            """Agrega un run XML al elemento párrafo."""
+            r_el = etree.SubElement(p_el, qn("a:r"))
+            rPr = etree.SubElement(r_el, qn("a:rPr"), attrib={"lang": "es-AR", "dirty": "0"})
+            if bold:
+                rPr.set("b", "1")
+            if font_size:
+                rPr.set("sz", str(int(font_size * 100)))
+            if font_name:
+                latin = etree.SubElement(rPr, qn("a:latin"))
+                latin.set("typeface", font_name)
+            t_el = etree.SubElement(r_el, qn("a:t"))
+            t_el.text = run_text
 
-    # 2) Reemplazo embebido: soporta placeholders dentro de un texto mayor en el mismo cuadro.
+        def _write_line_to_p(p_el, line):
+            """Escribe una línea con negrita automática antes del primer ':'."""
+            colon_idx = line.find(":")
+            if colon_idx > 0:
+                label = line[: colon_idx + 1]   # incluye el ':'
+                rest  = line[colon_idx + 1 :]   # todo lo que sigue
+                _add_run_to_p(p_el, label, bold=True,  font_size=base_font_size, font_name=base_font_name)
+                if rest:
+                    _add_run_to_p(p_el, rest, bold=False, font_size=base_font_size, font_name=base_font_name)
+            else:
+                _add_run_to_p(p_el, line, bold=False, font_size=base_font_size, font_name=base_font_name)
+
+        # Primera línea va al párrafo original
+        _write_line_to_p(p_elem, lines[0])
+
+        # Líneas adicionales: insertar nuevos párrafos después del original
+        insert_after = p_elem
+        for line in lines[1:]:
+            new_p = copy.deepcopy(p_elem)
+            # Limpiar runs del nuevo párrafo clonado
+            for r in new_p.findall(qn("a:r")):
+                new_p.remove(r)
+            _write_line_to_p(new_p, line)
+            insert_after.addnext(new_p)
+            insert_after = new_p
+            extra_paras.append(new_p)
+
+        return extra_paras
+
+    # ── 1) Reemplazo robusto: reconstruye texto por párrafo y reemplaza ──────
+    already_processed = set()  # shape ids ya procesados en modo exacto
+
     for shape in slide.shapes:
         if not shape.has_text_frame:
             continue
-
         tf = shape.text_frame
-        original_text = tf.text or ""
-        new_text = original_text
-        replaced_keys = []
 
-        for key, value in replacements.items():
-            if key in new_text:
-                val_str = _value_to_text(value)
-                val_str = val_str.replace("\\n", "\n").replace("\\\n", "\n")
-                new_text = new_text.replace(key, val_str)
-                replaced_keys.append(key)
+        # Log de depuración para ver qué estamos procesando
+        log(f"DEBUG: replace_placeholders - Procesando shape: '{shape.name}', Texto: '{tf.text.strip()}'")
 
-        if new_text != original_text:
-            tf.text = new_text
+        # Texto completo del cuadro para detectar si es reemplazo "exacto"
+        full_box_text = tf.text.strip()
+
+        # Modo exacto: el cuadro contiene SOLO un placeholder
+        if full_box_text in replacements:
+            key = full_box_text
+            value = replacements[key]
+            already_processed.add(id(shape))
+
+            # Limpiar todos los párrafos salvo el primero
+            while len(tf.paragraphs) > 1:
+                p_to_remove = tf.paragraphs[-1]._p
+                p_to_remove.getparent().remove(p_to_remove)
+
+            first_para = tf.paragraphs[0]
+
+            if isinstance(value, list):
+                # Lista de dicts con {text, bold}
+                for r in first_para._p.findall(qn("a:r")):
+                    first_para._p.remove(r)
+                insert_after = first_para._p
+                for item in value:
+                    if not isinstance(item, dict):
+                        continue
+                    new_p = copy.deepcopy(first_para._p)
+                    for r in new_p.findall(qn("a:r")):
+                        new_p.remove(r)
+                    r_el = etree.SubElement(new_p, qn("a:r"))
+                    rPr = etree.SubElement(r_el, qn("a:rPr"), attrib={"lang": "es-AR", "dirty": "0"})
+                    if item.get("bold", False):
+                        rPr.set("b", "1")
+                    t_el = etree.SubElement(r_el, qn("a:t"))
+                    t_el.text = item.get("text", "")
+                    insert_after.addnext(new_p)
+                    insert_after = new_p
+            else:
+                val_str = _value_to_text(value).replace("\\n", "\n").replace("\\\n", "\n")
+                _set_para_with_bold_labels(first_para, val_str)
+
             for p in tf.paragraphs:
                 p.alignment = PP_ALIGN.JUSTIFY
-            for key in replaced_keys:
+            modified.append((tf, key))
+            continue
+
+        # Modo embebido: el cuadro tiene texto con uno o más placeholders intercalados
+        changed = False
+        replaced_keys_here = []
+
+        for para in tf.paragraphs:
+            para_text = _rebuild_para_text(para)
+            new_para_text = para_text
+
+            for key, value in replacements.items():
+                if key in new_para_text:
+                    val_str = _value_to_text(value).replace("\\n", "\n").replace("\\\n", "\n")
+                    new_para_text = new_para_text.replace(key, val_str)
+                    if key not in replaced_keys_here:
+                        replaced_keys_here.append(key)
+
+            if new_para_text != para_text:
+                _set_para_with_bold_labels(para, new_para_text)
+                para.alignment = PP_ALIGN.JUSTIFY
+                changed = True
+
+        if changed:
+            # Log resumido del cambio
+            log(f"DEBUG: replace_placeholders - Modificada forma '{shape.name}' (reemplazo embebido)")
+            for key in replaced_keys_here:
                 modified.append((tf, key))
 
-    # 3) Limpieza final: si queda algún placeholder sin reemplazar, ocultarlo con blanco.
-    unresolved_pattern = re.compile(r"\{\{ph_[^}]+\}\}")
+    # ── 2a) Limpieza: párrafos vacíos tras reemplazo con "" ──────────────────
     for shape in slide.shapes:
         if not shape.has_text_frame:
             continue
         tf = shape.text_frame
-        original_text = tf.text or ""
-        cleaned_text = unresolved_pattern.sub(" ", original_text)
-        if cleaned_text != original_text:
-            tf.text = cleaned_text
+        paras_to_remove = []
+        for para in tf.paragraphs:
+            para_text = _rebuild_para_text(para).strip()
+            if not para_text:
+                paras_to_remove.append(para._p)
+        for p_elem in paras_to_remove:
+            log(f"DEBUG: replace_placeholders - Limpiando párrafo vacío en shape '{shape.name}'")
+            parent = p_elem.getparent()
+            if parent is not None:
+                siblings = parent.findall(qn("a:p"))
+                if len(siblings) > 1:
+                    parent.remove(p_elem)
+
+    # ── 2) Limpieza: eliminar párrafos con placeholders no resueltos ──────────
+    for shape in slide.shapes:
+        if not shape.has_text_frame:
+            continue
+        tf = shape.text_frame
+        paras_to_remove = []
+
+        for para in tf.paragraphs:
+            para_text = _rebuild_para_text(para)
+            if unresolved_pattern.search(para_text):
+                cleaned = unresolved_pattern.sub("", para_text).strip()
+                if not cleaned:
+                    paras_to_remove.append(para._p)
+
+        for p_elem in paras_to_remove:
+            parent = p_elem.getparent()
+            if parent is not None:
+                siblings = parent.findall(qn("a:p"))
+                if len(siblings) > 1:
+                    parent.remove(p_elem)
+                else:
+                    # Limpiar runs del único párrafo
+                    for r in p_elem.findall(qn("a:r")):
+                        p_elem.remove(r)
 
     return modified
 
@@ -124,11 +254,13 @@ def convert_to_pdf(pptx_file: str) -> str:
     os.makedirs(output_dir, exist_ok=True)
     base_name = os.path.basename(pptx_file).replace(".pptx", ".pdf")
     pdf_file = os.path.join(output_dir, base_name)
+    if os.path.exists(pdf_file):
+        os.remove(pdf_file)
 
-    user_inst = f"-env:UserInstallation=file:///tmp/lo_{uuid.uuid4()}"
+    profile_dir = f"/tmp/lo_{uuid.uuid4()}"
     cmd = [
         "libreoffice",
-        user_inst,
+        f"-env:UserInstallation=file://{profile_dir}",
         "--headless",
         "--convert-to",
         "pdf",
@@ -142,6 +274,9 @@ def convert_to_pdf(pptx_file: str) -> str:
     except subprocess.CalledProcessError as e:
         log(f"⚠️ Error en LibreOffice: {e.stderr.decode('utf-8', errors='replace')}")
         raise Exception(f"LibreOffice error: {e.stderr.decode()}")
+    finally:
+        if os.path.exists(profile_dir):
+            shutil.rmtree(profile_dir, ignore_errors=True)
 
     return pdf_file
 
@@ -158,37 +293,33 @@ def generar_portada(data, logo_stream):
         "{{ph_pie_r}}": data.get("pie_r", ""),
     }
 
+    # Insertar logo buscando el marcador {{ph_logo}}
+    insert_logo_with_scaling(slide, logo_stream)
+
     # Ejecutamos el reemplazo normal
     modified = replace_placeholders(slide, replacements)
 
+    # Aplicar formato SOLO a los campos necesarios
     for tf, key in modified:
         key_l = key.lower()
-        if "titulo" in key_l:
-            apply_text_formatting(tf, font_name="Calibri", size=18)
-        elif "sub" in key_l:
-            apply_text_formatting(tf, font_name="Calibri", size=14)
+        if "titulo" in key_l or "subtitle" in key_l:
+            apply_text_formatting(tf, font_name="Aptos", size=18)
+            for p in tf.paragraphs:
+                p.alignment = PP_ALIGN.CENTER
+                p.line_spacing = 1.5
+        elif "fecha" in key_l:
+            apply_text_formatting(tf, font_name="Aptos", size=12)
+            for p in tf.paragraphs:
+                p.alignment = PP_ALIGN.CENTER
+                p.line_spacing = 1.2
         elif "pie" in key_l:
-            apply_text_formatting(tf, font_name=None, size=10)
-        else:
-            apply_text_formatting(tf, font_name=None, size=12)
-
-    # Aplicamos el centrado manual a los campos específicos
-    campos_a_centrar = ["{{ph_subtitle}}", "{{ph_fecha}}"]
-
-    for shape in slide.shapes:
-        if shape.has_text_frame:
-            # Buscamos si el texto de la forma coincide con los valores ya reemplazados
-            # (o puedes volver a iterar sobre las keys de replacements)
-            for key in campos_a_centrar:
-                valor_insertado = replacements[key]
-                if valor_insertado and valor_insertado in shape.text:
-                    for paragraph in shape.text_frame.paragraphs:
-                        paragraph.alignment = PP_ALIGN.CENTER
-
-    # Busca un placeholder de tipo imagen (18) para el logo
-    insert_logo_with_scaling(slide, logo_stream)
+            apply_text_formatting(tf, font_name="Aptos", size=10)
+            for p in tf.paragraphs:
+                p.alignment = PP_ALIGN.LEFT if "l" in key_l else PP_ALIGN.RIGHT
+                p.line_spacing = 1.0
 
     output = f"{DATA_DIR}/pptx-parts/portada.pptx"
+    _prepare_output_file(output)
     prs.save(output)
     return output
 
@@ -202,14 +333,15 @@ def generar_contenido_slide(slide_item, data, logo_stream):
         # No crear la hoja si no hay gráficos
         return None
     elif num_charts == 1:
-        template_file = "plantilla_contenido1.pptx"
+        template_file = "plantilla_contenido_1.pptx"
     elif num_charts == 2:
-        template_file = "plantilla_contenido2.pptx"
+        template_file = "plantilla_contenido_2.pptx"
     elif num_charts == 3:
-        template_file = "plantilla_contenido3.pptx"
+        template_file = "plantilla_contenido_3.pptx"
     else:
         # Si hay más de 4, usar la plantilla de 4 gráficos
-        template_file = "plantilla_contenido4.pptx"
+        template_file = "plantilla_contenido_4.pptx"
+    print(f"Generando slide de contenido para {slide_item.get('type')} con {num_charts} gráficos usando plantilla {template_file}")
 
     prs = Presentation(f"{DATA_DIR}/plantillas/{template_file}")
 
@@ -236,6 +368,7 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     )
 
     # Diccionario de reemplazos
+    desc_val = str(slide_content.get("desc", "") or "")
     replacements = {
         "{{ph_titulo}}": slide_content.get("titulo", ""),
         "{{ph_periodo}}": periodo,
@@ -249,6 +382,8 @@ def generar_contenido_slide(slide_item, data, logo_stream):
         "{{ph_kpis_4}}": normalize_kpi_text(slide_content.get("kpis_4", ""), 250),
         "{{ph_pie_l}}": feet_l,
         "{{ph_pie_r}}": feet_r,
+        # Asegura que desc nunca sea None
+        "{{ph_desc}}": desc_val,
         # Sugerencias (opcionales, vacío si no vienen)
         "{{ph_sugerencia_1}}": normalize_suggestion_text(
             slide_content.get("sugerencia_1", ""), 200
@@ -262,16 +397,20 @@ def generar_contenido_slide(slide_item, data, logo_stream):
         "{{ph_sugerencia_4}}": normalize_suggestion_text(
             slide_content.get("sugerencia_4", ""), 200
         ),
-        "{{ph_sugerencia4}}": normalize_suggestion_text(
-            slide_content.get("sugerencia_4", ""), 200
-        ),
     }
-    charts = slide_content.get("charts", {})
-    # if product_type != "wazuh" and charts:
-    #     replacements["{{ph_utilizacion}}"] = slide_content.get("kpi_title", "")
-    #     replacements["{{ph_kpis}}"] = slide_content.get("kpis", "")
-    #     replacements["{{ph_soporte}}"] = slide_content.get("soporte_title", "")
-    #     replacements["{{ph_soporte_kpis}}"] = slide_content.get("soporte_kpi", "")
+    print(f"Reemplazos para slide de contenido ({product_type}): {replacements}")
+    print(f"Valor insertado en {{ph_desc}}: {desc_val}")
+    
+    # Insertar gráficos y logo ANTES del reemplazo de texto:
+    # Esto evita que la lógica de limpieza de replace_placeholders elimine los marcadores {{ph_...}}
+    if charts:
+        add_charts(slide, charts, friendly_names)
+
+    log(
+        f"DEBUG: generar_contenido_slide - type={product_type}, logo_stream={'sí' if logo_stream else 'no'}"
+    )
+    logo_inserted = insert_logo_with_scaling(slide, logo_stream)
+    log(f"DEBUG: generar_contenido_slide - logo_inserted={logo_inserted}")
 
     # Reemplazar texto marcador
     modified = replace_placeholders(slide, replacements)
@@ -292,11 +431,11 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     for flags in tf_flags.values():
         tf = flags["tf"]
         if flags["titulo"]:
-            apply_text_formatting(tf, font_name="Calibri", size=18)
+            apply_text_formatting(tf, font_name="Aptos", size=18)
             continue
 
         if flags["kpis"] or flags["sugerencia"]:
-            apply_text_formatting(tf, font_name="Calibri", size=12, set_line=False)
+            apply_text_formatting(tf, font_name="Aptos", size=12, set_line=False)
             for p in tf.paragraphs:
                 p.alignment = PP_ALIGN.LEFT
                 p.space_before = Pt(0)
@@ -310,20 +449,9 @@ def generar_contenido_slide(slide_item, data, logo_stream):
             continue
 
         apply_text_formatting(tf, font_name="Aptos", size=12)
-    replacements_chart = [
-        "Marcador de posición de imagen 6",
-        "Marcador de posición de imagen 7",
-        "Marcador de posición de imagen 16",
-        "Marcador de posición de imagen 17",
-        "Marcador de posición de imagen 18",
-    ]
-    # Insertar gráficos
-    if charts:
-        add_charts(slide, charts, friendly_names, replacements_chart)
-
-    insert_logo_with_scaling(slide, logo_stream)
 
     output_path = f"{DATA_DIR}/pptx-parts/contenido_{product_type}.pptx"
+    _prepare_output_file(output_path)
     prs.save(output_path)
     return output_path
 
@@ -331,7 +459,13 @@ def generar_contenido_slide(slide_item, data, logo_stream):
 def generar_slide_producto(
     resumen, product_type, data, logo_stream, pie_l="", pie_r=""
 ):
-    prs = Presentation(f"{DATA_DIR}/plantillas/plantilla_{product_type}.pptx")
+    # Normalizar product_type para selección de plantilla y campos
+    # Ejemplo: invgate.asj -> invgate
+    base_type = product_type.lower().split('.')[0]
+    if base_type == "invgate" or base_type == "asj": base_type = "invgate"
+
+    template_path = f"{DATA_DIR}/plantillas/plantilla_{base_type}.pptx"
+    prs = Presentation(template_path)
     slide = prs.slides[0]
 
     # Definir campos por tipo de producto
@@ -339,51 +473,106 @@ def generar_slide_producto(
         "uas": ["usu_per", "usu_esp", "solicitudes", "revalida"],
         "beyondtrust": ["pra", "rs", "ps", "adb", "epm"],
         "whalemate": ["sim", "aca", "ana", "grh", "cad"],
+        "wazuh": ["ddv", "snc", "enc", "ecn", "iav"], # Incluir ambos por compatibilidad
+        "invgate": ["isd", "iam"],
+        "invgate.asj": ["isd", "iam"],
+        "axur": ["pdm", "th", "cti", "fdd", "ddw", "tkd"],
+        "akurtech": ["tra", "pgs", "lgn", "rfg", "alr", "bwl", "rdc", "rdt", "rdp", "rdl"],
     }
 
     # Mapear product_type a grupo
-    tipo_grupo = ""
-    if product_type.lower() == "uas":
-        tipo_grupo = "uas"
-    elif product_type.lower() == "beyondtrust":
-        tipo_grupo = "beyondtrust"
-    elif product_type.lower() == "whalemate":
-        tipo_grupo = "whalemate"
+    tipo_grupo = base_type
 
     replacements = {
         "{{ph_resumen}}": resumen,
+        "{{ph_resume}}": resumen, # Compatibilidad con plantillas en inglés/mixtas
         "{{ph_pie_l}}": data.get("pie_l", ""),
         "{{ph_pie_r}}": data.get("pie_r", ""),
     }
 
+    # Agregar "VERSION:" como línea antes del resumen en el placeholder
+    # Buscar versión en distintas claves posibles del data dict
+    version_line = (
+        data.get("version") or
+        data.get("version_produccion") or
+        data.get("produccion_version") or
+        ""
+    )
+    if version_line:
+        res_text = f"VERSION: {version_line}\n\n{resumen}"
+        replacements["{{ph_resumen}}"] = res_text
+        replacements["{{ph_resume}}"] = res_text
+    
+    # Si el resumen ya trae info de versión embebida, agregar encabezado "VERSION:" igual
+    elif resumen and any(kw in resumen.lower() for kw in ["versión", "version", "v."]):
+        res_text = f"VERSION:\n{resumen}"
+        replacements["{{ph_resumen}}"] = res_text
+        replacements["{{ph_resume}}"] = res_text
+
     # Agregar los campos nuevos si corresponden
     if tipo_grupo:
         for campo in campos_por_tipo[tipo_grupo]:
-            replacements[f"{{{{ph_{campo}}}}}"] = data.get(campo, " ")
+            replacements[f"{{{{ph_{campo}}}}}"] = data.get(campo, "")
+
+    # Quitar negritas heredadas del template ANTES de reemplazar,
+    # para no pisar la negrita que _set_para_with_bold_labels va a aplicar.
+    for shape in slide.shapes:
+        if not shape.has_text_frame:
+            continue
+        for p in shape.text_frame.paragraphs:
+            for run in p.runs:
+                run.font.bold = False
+
+    log(
+        f"DEBUG: generar_slide_producto - product_type={product_type}, logo_stream={'sí' if logo_stream else 'no'}"
+    )
+    logo_inserted = insert_logo_with_scaling(slide, logo_stream)
+    log(f"DEBUG: generar_slide_producto - logo_inserted={logo_inserted}")
 
     modified = replace_placeholders(slide, replacements)
 
+    # Campos de módulos llevan negrita automática en la etiqueta (antes del ':').
+    # apply_text_formatting NO debe tocar bold en estos campos.
+    CAMPOS_CON_NEGRITA = {
+        "usu_per", "usu_esp", "solicitudes", "revalida",
+        "pra", "rs", "ps", "adb", "epm",
+        "sim", "aca", "ana", "grh", "cad",
+        "ddv", "snc", "enc", "iav",
+        "isd", "iam", "resumen",
+    }
+
     for tf, key in modified:
         key_l = key.lower()
+        campo = key_l.replace("{{ph_", "").replace("}}", "")
+
         if "titulo" in key_l:
-            apply_text_formatting(tf, font_name="Calibri", size=18)
+            apply_text_formatting(tf, font_name="Aptos", size=18)
         elif "sub" in key_l:
-            apply_text_formatting(tf, font_name="Calibri", size=14)
+            apply_text_formatting(tf, font_name="Aptos", size=14)
         elif "kpis" in key_l or "sugerencia" in key_l:
-            # Mantener KPIs y sugerencias compactos para compartir el alto disponible.
-            apply_text_formatting(tf, font_name="Calibri", size=12, set_line=False)
+            apply_text_formatting(tf, font_name="Aptos", size=12, set_line=False)
             for p in tf.paragraphs:
                 p.alignment = PP_ALIGN.LEFT
                 p.space_before = Pt(0)
                 p.space_after = Pt(0)
         elif "pie" in key_l:
             apply_text_formatting(tf, font_name=None, size=10)
+        elif campo in CAMPOS_CON_NEGRITA:
+            # Aplicar fuente y tamaño manualmente SIN tocar bold,
+            # para preservar la negrita de las etiquetas (antes del ':').
+            from pptx.util import Pt as _Pt
+            for p in tf.paragraphs:
+                p.alignment = PP_ALIGN.JUSTIFY
+                p.line_spacing = 1.5
+                for run in p.runs:
+                    run.font.name = "Aptos"
+                    run.font.size = _Pt(12)
+                    # run.font.bold intacto → preserva lo de _set_para_with_bold_labels
         else:
             apply_text_formatting(tf, font_name="Aptos", size=12)
 
-    insert_logo_with_scaling(slide, logo_stream)
-
     output = f"{DATA_DIR}/pptx-parts/producto_{product_type}.pptx"
+    _prepare_output_file(output)
     prs.save(output)
     return output
 
@@ -399,20 +588,27 @@ def generar_cierre(data, logo_stream):
         "{{ph_pie_r}}": data.get("pie_r", ""),
     }
 
+    # Insertar logo
+    insert_logo_with_scaling(slide, logo_stream)
+
     modified = replace_placeholders(slide, replacements)
 
+    # Aplicar formato SOLO a los campos necesarios
     for tf, key in modified:
         key_l = key.lower()
         if "titulo" in key_l:
-            apply_text_formatting(tf, font_name="Calibri", size=18)
+            apply_text_formatting(tf, font_name="Aptos", size=18, set_line=True)
+            for p in tf.paragraphs:
+                p.alignment = PP_ALIGN.CENTER
+                p.line_spacing = 1.5
         elif "pie" in key_l:
-            apply_text_formatting(tf, font_name=None, size=10)
-        else:
-            apply_text_formatting(tf, font_name=None, size=12)
-
-    insert_logo_with_scaling(slide, logo_stream)
+            apply_text_formatting(tf, font_name="Aptos", size=10)
+            for p in tf.paragraphs:
+                p.alignment = PP_ALIGN.LEFT if "l" in key_l else PP_ALIGN.RIGHT
+                p.line_spacing = 1.0
 
     output = f"{DATA_DIR}/pptx-parts/cierre.pptx"
+    _prepare_output_file(output)
     prs.save(output)
     return output
 
@@ -426,25 +622,27 @@ def generar_buenas_practicas(data, logo_stream):
         "{{ph_pie_r}}": data.get("pie_r", ""),
     }
 
+    # Insertar logo
+    insert_logo_with_scaling(slide, logo_stream)
+
     modified = replace_placeholders(slide, replacements)
 
     for tf, key in modified:
         key_l = key.lower()
         if "titulo" in key_l:
-            apply_text_formatting(tf, font_name="Calibri", size=18)
+            apply_text_formatting(tf, font_name="Aptos", size=18)
         elif "pie" in key_l:
             apply_text_formatting(tf, font_name=None, size=10)
         else:
             apply_text_formatting(tf, font_name=None, size=12)
 
-    # Asegurar que el título "BUENAS PRACTICAS" sea Calibri 18
+    # Asegurar que el título "BUENAS PRACTICAS" sea Aptos 18
     for shape in slide.shapes:
         if shape.has_text_frame and "BUENAS PRACTICAS" in shape.text.upper():
-            apply_text_formatting(shape.text_frame, font_name="Calibri", size=18)
-
-    insert_logo_with_scaling(slide, logo_stream)
+            apply_text_formatting(shape.text_frame, font_name="Aptos", size=18)
 
     output = f"{DATA_DIR}/pptx-parts/buenas_practicas.pptx"
+    _prepare_output_file(output)
     prs.save(output)
     return output
 

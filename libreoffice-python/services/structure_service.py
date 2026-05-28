@@ -12,6 +12,9 @@ def ultimo_dia_mes(dt: datetime) -> datetime:
     siguiente_mes = (dt.replace(day=28) + timedelta(days=4)).replace(day=1)
     return siguiente_mes - timedelta(days=1)
 
+MAX_CHART_WEEKS = 4
+
+
 def _chart_internal(values, name, build, kpis):
     total = 0
     for v in values:
@@ -19,12 +22,13 @@ def _chart_internal(values, name, build, kpis):
         total += count
         if count > 0:
             kpis[v] = count
-    
+
     chart_res = {"name": name, "used": total > 0}
     if total > 0:
+        labels = [f"Semana {i+1}" for i in range(MAX_CHART_WEEKS)]
         build["charts"][name] = {
             "type": "bar",
-            "labels": ["Semana 1", "Semana 2", "Semana 3", "Semana 4"],
+            "labels": labels,
             **values,
         }
     return chart_res
@@ -37,6 +41,7 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
         "periodo": "",
         "sugerencia_1": "", "sugerencia_2": "", "sugerencia_3": "",
         "charts": {},
+        "desc": resume, # Inicializar desc con el resumen por defecto si no hay descripción específica
     }
     
     chart_data = {
@@ -51,7 +56,7 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
     }
     
     kpis = {}
-    slide_info_fields = ["resumen", "sugerencia_1", "sugerencia_2", "sugerencia_3"]
+    slide_info_fields = ["resumen", "sugerencia_1", "sugerencia_2", "sugerencia_3", "desc"]
 
     for semana in product_data:
         semana_key = semana.get("Semana", "").strip()
@@ -63,6 +68,8 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
                 break
             for chart_name, series_def in chart_definitions.items():
                 for serie_name, json_key in series_def.items():
+                    if len(chart_data[chart_name][serie_name]) >= MAX_CHART_WEEKS:
+                        continue
                     try:
                         val = int(float(semana.get(json_key, 0)))
                     except:
@@ -94,7 +101,7 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
                 if serie_name in kpis:
                     nombre_amigable = all_series.get(serie_name, serie_name)
                     build[kpi_key] += f"{nombre_amigable}: {kpis[serie_name]}\n"
-            
+
             if c_res["name"] != "soporte":
                 sug_val = build.get(f"sugerencia_{position}", "")
                 if sug_val:

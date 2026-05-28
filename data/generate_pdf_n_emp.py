@@ -19,6 +19,12 @@ warnings.filterwarnings("ignore")
 DATA_DIR = "/data"
 
 
+def _prepare_output_file(path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    if os.path.exists(path):
+        os.remove(path)
+
+
 # --------------------------------------------------------------
 # UTILS
 # --------------------------------------------------------------
@@ -215,6 +221,7 @@ def generar_portada(data, logo_stream):
     insert_logo_with_scaling(slide, logo_stream)
 
     output = f"{DATA_DIR}/pptx-parts/portada.pptx"
+    _prepare_output_file(output)
     prs.save(output)
     return output
 
@@ -238,6 +245,7 @@ def generar_cierre(data, logo_stream):
     insert_logo_with_scaling(slide, logo_stream)
 
     output = f"{DATA_DIR}/pptx-parts/cierre.pptx"
+    _prepare_output_file(output)
     prs.save(output)
     return output
 
@@ -247,8 +255,11 @@ def generar_cierre(data, logo_stream):
 # --------------------------------------------------------------
 def convert_to_pdf(pptx_file):
     output_dir = f"{DATA_DIR}/pdf-parts"
+    os.makedirs(output_dir, exist_ok=True)
     base_name = os.path.basename(pptx_file).replace(".pptx", ".pdf")
     pdf_file = os.path.join(output_dir, base_name)
+    if os.path.exists(pdf_file):
+        os.remove(pdf_file)
     cmd = [
         "libreoffice",
         "--headless",
