@@ -434,7 +434,6 @@ def generar_contenido_slide(slide_item, data, logo_stream):
             apply_text_formatting(tf, font_name="Aptos", size=18)
             continue
 
-
         if flags["sugerencia"] or flags["kpis"] or "title" in key_l:
             apply_text_formatting(tf, font_name="Aptos", size=10, set_line=False)
             for p in tf.paragraphs:
@@ -449,7 +448,19 @@ def generar_contenido_slide(slide_item, data, logo_stream):
                         run.font.italic = True
             continue
 
-        apply_text_formatting(tf, font_name="Aptos", size=12)
+        # Cambia el tamaño de fuente solo para axur y plantilla_axur.pptx
+        font_size = 12
+        # Buscar el nombre de la plantilla usada
+        template_file = None
+        # Buscar en la pila de llamadas la variable template_file
+        import inspect
+        for frame_info in inspect.stack():
+            if 'template_file' in frame_info.frame.f_locals:
+                template_file = frame_info.frame.f_locals['template_file']
+                break
+        if slide_item.get("type", "").lower() == "axur" and template_file == "plantilla_axur.pptx":
+            font_size = 10
+        apply_text_formatting(tf, font_name="Aptos", size=font_size)
 
     output_path = f"{DATA_DIR}/pptx-parts/contenido_{product_type}.pptx"
     _prepare_output_file(output_path)
@@ -561,16 +572,20 @@ def generar_slide_producto(
         elif campo in CAMPOS_CON_NEGRITA:
             # Aplicar fuente y tamaño manualmente SIN tocar bold,
             # para preservar la negrita de las etiquetas (antes del ':').
+            # Para axur y akurtech se usa tamaño 11 en lugar de 12.
             from pptx.util import Pt as _Pt
+            campo_font_size = 11 if base_type in ("axur", "akurtech") else 12
             for p in tf.paragraphs:
                 p.alignment = PP_ALIGN.JUSTIFY
                 p.line_spacing = 1.5
                 for run in p.runs:
                     run.font.name = "Aptos"
-                    run.font.size = _Pt(12)
+                    run.font.size = _Pt(campo_font_size)
                     # run.font.bold intacto → preserva lo de _set_para_with_bold_labels
         else:
-            apply_text_formatting(tf, font_name="Aptos", size=12)
+            # Para axur y akurtech se usa tamaño 11 en lugar de 12.
+            campo_font_size = 11 if base_type in ("axur", "akurtech") else 12
+            apply_text_formatting(tf, font_name="Aptos", size=campo_font_size)
 
     output = f"{DATA_DIR}/pptx-parts/producto_{product_type}.pptx"
     _prepare_output_file(output)
