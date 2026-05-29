@@ -212,6 +212,7 @@ async def build_structure(request: Request):
                 "invgate": "plantilla_contenido.pptx",
                 "beyondtrust": "plantilla_contenido.pptx",
                 "whalemate": "plantilla_contenido.pptx",
+                "axur": "plantilla_contenido.pptx",
             }
             if slide_data:
                 main["slides"].append(
@@ -221,7 +222,7 @@ async def build_structure(request: Request):
                         "file_slide": file_slide[product],
                     }
                 )
-
+                        
         return {"status": "ok", "output_file": json.dumps(main, ensure_ascii=False)}
     except Exception as e:
         raise HTTPException(

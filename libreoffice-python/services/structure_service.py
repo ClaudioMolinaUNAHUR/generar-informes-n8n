@@ -43,22 +43,28 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
         "charts": {},
         "desc": resume, # Inicializar desc con el resumen por defecto si no hay descripción específica
     }
-    
+
+    print("[DEBUG] build_slide_structure: product_name=", product_name)
+    print("[DEBUG] build_slide_structure: pointer_resume=", pointer_resume)
+    print("[DEBUG] build_slide_structure: chart_definitions keys=", list(chart_definitions.keys()))
+    print("[DEBUG] build_slide_structure: product_data ejemplo=", product_data[0] if product_data else None)
+
     chart_data = {
         chart_name: {serie: [] for serie in series}
         for chart_name, series in chart_definitions.items()
     }
-    
+
     all_series = {
         serie: json_key
         for series in chart_definitions.values()
         for serie, json_key in series.items()
     }
-    
+
     kpis = {}
     slide_info_fields = ["resumen", "sugerencia_1", "sugerencia_2", "sugerencia_3", "desc"]
 
     for semana in product_data:
+        print("[DEBUG] Semana procesada:", semana)
         semana_key = semana.get("Semana", "").strip()
         if semana_key in slide_info_fields:
             valor = semana.get(pointer_resume, "")
@@ -77,8 +83,10 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
                     chart_data[chart_name][serie_name].append(val)
 
     chart_names_used = []
+    print("[DEBUG] chart_data recolectado:", chart_data)
     for chart_name, data in chart_data.items():
         chart_names_used.append(_chart_internal(data, chart_name, build, kpis))
+    print("[DEBUG] chart_names_used:", chart_names_used)
 
     # Lógica de limpieza para soporte solo
     count_used = sum(1 for c in chart_names_used if c["used"])
@@ -91,17 +99,20 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
     
     position = 1
     for c_res in chart_names_used:
-        if c_res["used"]:      
+        if c_res["used"]:
             kpi_key = f"kpis_{position}"
             title_key = f"title_{position}"
             build[kpi_key] = ""
             build[title_key] = c_res["name"].capitalize().replace("_", " ")
-            
-            for serie_name in chart_definitions[c_res["name"]].keys():
-                if serie_name in kpis:
-                    nombre_amigable = all_series.get(serie_name, serie_name)
-                    build[kpi_key] += f"{nombre_amigable}: {kpis[serie_name]}\n"
-
+            try:
+                print(f"[DEBUG] Procesando KPIs para chart: {c_res['name']}")
+                chart_def = chart_definitions[c_res["name"]]
+                for serie_name in chart_def.keys():
+                    if serie_name in kpis:
+                        nombre_amigable = all_series.get(serie_name, serie_name)
+                        build[kpi_key] += f"{nombre_amigable}: {kpis[serie_name]}\n"
+            except Exception as e:
+                print(f"[ERROR] Al procesar KPIs/titles para chart '{c_res['name']}': {e}")
             if c_res["name"] != "soporte":
                 sug_val = build.get(f"sugerencia_{position}", "")
                 if sug_val:

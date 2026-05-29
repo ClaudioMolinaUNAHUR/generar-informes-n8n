@@ -12,10 +12,10 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: manual
   hostPath:
-    path: "/mnt/c/Users/cmolina/Desktop/varios/k8s-n8n/data"
+    path: "/mnt/c/Users/fmora/Desktop/generar-informes-n8n/data"
   claimRef:
     name: n8n-pvc
-    namespace: n8n-project
+    namespace: n8n-project 
 ---
 apiVersion: v1
 kind: PersistentVolume
@@ -30,7 +30,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: manual
   hostPath:
-    path: "/mnt/c/Users/cmolina/Desktop/varios/k8s-n8n/postgres-data"
+    path: "/mnt/c/Users/fmora/Desktop/generar-informes-n8n/postgres-data"
   claimRef:
     name: postgres-data-postgres-statefulset-0
     namespace: n8n-project
@@ -61,7 +61,7 @@ spec:
   persistentVolumeReclaimPolicy: Retain
   storageClassName: manual
   hostPath:
-    path: "/mnt/c/Users/cmolina/Desktop/varios/k8s-n8n/libreoffice-python"
+    path: "/mnt/c/Users/fmora/Desktop/generar-informes-n8n/libreoffice-python"
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

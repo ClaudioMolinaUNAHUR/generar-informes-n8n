@@ -18,7 +18,7 @@ from pptx.enum.text import PP_ALIGN, MSO_AUTO_SIZE
 from pptx.util import Pt
 import re
 from services.chart_service import create_matplotlib_chart, add_charts
-
+from pptx.dml.color import RGBColor
 
 def _prepare_output_file(path):
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -434,8 +434,9 @@ def generar_contenido_slide(slide_item, data, logo_stream):
             apply_text_formatting(tf, font_name="Aptos", size=18)
             continue
 
-        if flags["kpis"] or flags["sugerencia"]:
-            apply_text_formatting(tf, font_name="Aptos", size=12, set_line=False)
+
+        if flags["sugerencia"] or flags["kpis"] or "title" in key_l:
+            apply_text_formatting(tf, font_name="Aptos", size=10, set_line=False)
             for p in tf.paragraphs:
                 p.alignment = PP_ALIGN.LEFT
                 p.space_before = Pt(0)
@@ -583,7 +584,7 @@ def generar_cierre(data, logo_stream):
     slide = prs.slides[0]
 
     replacements = {
-        "{{ph_titulo}}": cierre.get("titulo", ""),
+        "{{ph_titulo}}": cierre.get("titulo", "").replace("\n", " ").replace("\r", " "),
         "{{ph_pie_l}}": data.get("pie_l", ""),
         "{{ph_pie_r}}": data.get("pie_r", ""),
     }
@@ -601,6 +602,9 @@ def generar_cierre(data, logo_stream):
             for p in tf.paragraphs:
                 p.alignment = PP_ALIGN.CENTER
                 p.line_spacing = 1.5
+                for run in p.runs:
+                    run.font.color.rgb = RGBColor(255, 255, 255) 
+                # Asegurar título
         elif "pie" in key_l:
             apply_text_formatting(tf, font_name="Aptos", size=10)
             for p in tf.paragraphs:
