@@ -29,7 +29,15 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
     }
 
     # Paleta de colores para series (se rotan si hay más series)
-    palette = ["#185FA5", "#0F6E56", "#534AB7", "#5F5E5A"]
+    palette = [
+        "#c0504d",  # azul
+        "#772c2a",  # verde
+        "#8063a1",  # violeta
+        "#f79546",  # gris oscuro
+        "#4f81bc",  # naranja
+        "#9bba58",  # rojo/  # azul fuerte
+        "#4aacc5",  # bordo fuerte
+    ]
 
     # Detectar series numéricas dinámicamente (manteniendo el orden del dict)
     series_keys = []

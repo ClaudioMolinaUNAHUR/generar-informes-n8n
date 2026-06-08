@@ -431,7 +431,7 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     for flags in tf_flags.values():
         tf = flags["tf"]
         if flags["titulo"]:
-            apply_text_formatting(tf, font_name="Aptos", size=18)
+            apply_text_formatting(tf, font_name="Aptos", size=28)
             continue
 
         if flags["sugerencia"] or flags["kpis"] or "title" in key_l:
@@ -511,13 +511,19 @@ def generar_slide_producto(
         ""
     )
     if version_line:
-        res_text = f"VERSION: {version_line}\n\n{resumen}"
+        if base_type == "akurtech":
+            res_text = f"{version_line}\n\n{resumen}"
+        else:
+            res_text = f"VERSION: {version_line}\n\n{resumen}"
         replacements["{{ph_resumen}}"] = res_text
         replacements["{{ph_resume}}"] = res_text
     
     # Si el resumen ya trae info de versión embebida, agregar encabezado "VERSION:" igual
     elif resumen and any(kw in resumen.lower() for kw in ["versión", "version", "v."]):
-        res_text = f"VERSION:\n{resumen}"
+        if base_type == "akurtech":
+            res_text = resumen
+        else:
+            res_text = f"VERSION:\n{resumen}"
         replacements["{{ph_resumen}}"] = res_text
         replacements["{{ph_resume}}"] = res_text
 

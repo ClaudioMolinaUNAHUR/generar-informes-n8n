@@ -14,16 +14,62 @@ def ultimo_dia_mes(dt: datetime) -> datetime:
 
 MAX_CHART_WEEKS = 4
 
+LOGO_ZAR = "zar.png"
 
-def _chart_internal(values, name, build, kpis):
+
+def procesa_fecha_portada(fecha_str: str, logo: str) -> str:
+    """
+    Recibe fecha_portada del JSON de entrada (formato "YYYY-MM") y el logo,
+    parsea la fecha y delega en fecha_portada para generar el periodo formateado.
+
+    Ejemplo:
+      procesa_fecha_portada("2026-05", "zar.png")  →  "2026\\n26/04 - 25/05"
+      procesa_fecha_portada("2026-05", "otro.png") →  "2026\\n01/05 - 31/05"
+    """
+    try:
+        fecha = datetime.strptime(fecha_str.strip(), "%Y-%m")
+    except (ValueError, AttributeError):
+        return fecha_str  # Si el formato no es el esperado, devolver tal cual
+    return fecha_portada(fecha, logo)
+
+
+def fecha_portada(fecha: datetime, logo: str) -> str:
+    """
+    Devuelve el periodo de la portada según el logo.
+
+    - Caso general:  año\\nDD/MM - DD/MM  (primer y último día del mes)
+    - Caso zar.png:  año\\nDD/MM - DD/MM  (día 26 del mes anterior al día 25 del mes)
+
+    Ejemplos:
+      fecha=junio-2026, logo=cualquiera  →  "2026\\n01/06 - 30/06"
+      fecha=junio-2026, logo=zar.png     →  "2026\\n26/05 - 25/06"
+    """
+    anio = fecha.year
+
+    if logo and logo.strip().lower() == LOGO_ZAR:
+        # Periodo: día 26 del mes anterior → día 25 del mes actual
+        primer_dia = (fecha.replace(day=1) - timedelta(days=1)).replace(day=26)
+        ultimo_dia = fecha.replace(day=25)
+    else:
+        # Periodo: primer y último día del mes
+        primer_dia = fecha.replace(day=1)
+        ultimo_dia = ultimo_dia_mes(fecha)
+
+    return f"{anio}\n{primer_dia.strftime('%d/%m')} - {ultimo_dia.strftime('%d/%m')}"
+
+
+def _chart_internal(values, name, build, kpis, show_zeros=False):
     total = 0
     for v in values:
         count = sum(values[v])
         total += count
         if count > 0:
             kpis[v] = count
+        elif show_zeros:
+            # Registrar explícitamente el 0 para que aparezca en los KPIs
+            kpis[v] = 0
 
-    chart_res = {"name": name, "used": total > 0}
+    chart_res = {"name": name, "used": total > 0, "show_zeros": show_zeros}
     if total > 0:
         labels = [f"Semana {i+1}" for i in range(MAX_CHART_WEEKS)]
         build["charts"][name] = {
@@ -33,15 +79,18 @@ def _chart_internal(values, name, build, kpis):
         }
     return chart_res
 
-def build_slide_structure(product_data, product_name, chart_definitions, pointer_resume, resume):
+# Nombres de charts que deben mostrar KPIs aunque su valor sea 0
+CHARTS_SHOW_ZEROS = {"takedown_estado_resolucion"}
+
+def build_slide_structure(product_data, product_name, chart_definitions, pointer_resume, resume, fecha: datetime = None, logo: str = ""):
     product_name_clean = product_name.split(".")[0]
     build = {
         "titulo": product_name_clean.upper(),
         "resumen": resume + "\n",
-        "periodo": "",
+        "periodo": fecha_portada(fecha, logo) if fecha else "",
         "sugerencia_1": "", "sugerencia_2": "", "sugerencia_3": "",
         "charts": {},
-        "desc": resume, # Inicializar desc con el resumen por defecto si no hay descripción específica
+        "desc": resume,
     }
 
     print("[DEBUG] build_slide_structure: product_name=", product_name)
@@ -66,12 +115,11 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
     for semana in product_data:
         print("[DEBUG] Semana procesada:", semana)
         semana_key = semana.get("Semana", "").strip()
+
         if semana_key in slide_info_fields:
             valor = semana.get(pointer_resume, "")
             build[semana_key] += str(valor) if valor != "null" else ""
-        else:
-            if semana_key == "sugerencia_3":
-                break
+        elif semana_key.startswith("Semana"):
             for chart_name, series_def in chart_definitions.items():
                 for serie_name, json_key in series_def.items():
                     if len(chart_data[chart_name][serie_name]) >= MAX_CHART_WEEKS:
@@ -85,7 +133,8 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
     chart_names_used = []
     print("[DEBUG] chart_data recolectado:", chart_data)
     for chart_name, data in chart_data.items():
-        chart_names_used.append(_chart_internal(data, chart_name, build, kpis))
+        show_zeros = chart_name in CHARTS_SHOW_ZEROS
+        chart_names_used.append(_chart_internal(data, chart_name, build, kpis, show_zeros=show_zeros))
     print("[DEBUG] chart_names_used:", chart_names_used)
 
     # Lógica de limpieza para soporte solo
@@ -93,10 +142,9 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
     if count_used == 1:
        for c_res in chart_names_used:
             if c_res["used"] and c_res["name"] == "soporte":
-                build["periodo"] = ""
                 build["charts"] = {}
                 return build
-    
+
     position = 1
     for c_res in chart_names_used:
         if c_res["used"]:
@@ -108,7 +156,8 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
                 print(f"[DEBUG] Procesando KPIs para chart: {c_res['name']}")
                 chart_def = chart_definitions[c_res["name"]]
                 for serie_name in chart_def.keys():
-                    if serie_name in kpis:
+                    # Mostrar el KPI si tiene valor > 0, o si el chart permite mostrar 0s
+                    if serie_name in kpis and (kpis[serie_name] > 0 or c_res.get("show_zeros")):
                         nombre_amigable = all_series.get(serie_name, serie_name)
                         build[kpi_key] += f"{nombre_amigable}: {kpis[serie_name]}\n"
             except Exception as e:
@@ -118,5 +167,5 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
                 if sug_val:
                     build[kpi_key] += f"SUGERENCIAS: {sug_val}"
             position += 1
-            
+
     return build

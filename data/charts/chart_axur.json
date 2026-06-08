@@ -1,19 +1,17 @@
 {
-  "tipos_de_amenazas": {
+  "incidentes_tipos_de_amenazas": {
     "Phishing": "Phishing",
-    "Nombre de dominio similar": "Nombre de dominio similar",
     "Perfil falso en red social": "Perfil falso en red social",
     "Uso fraudulento de marca": "Uso fraudulento de marca"
   },
-  "estado_resolucion": {
+  "takedown_estado_resolucion": {
     "Resuelto": "Resuelto",
     "En curso": "En curso",
     "Interrumpido": "Interrumpido",
     "No resuelto": "No resuelto"
   },
-  "soporte_axur": {
+  "soporte": {
     "Consultas Respondidas": "Consultas Respondidas",
-    "Monitoreos Realizados": "Monitoreos Realizados",
     "Capacitaciones/ Asistencias": "Capacitaciones/ Asistencias"
   }
 }
