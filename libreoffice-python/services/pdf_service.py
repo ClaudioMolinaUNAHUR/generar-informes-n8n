@@ -26,6 +26,12 @@ def _prepare_output_file(path):
         os.remove(path)
 
 
+def _get_suggestion_value(slide_content, index):
+    singular_key = f"sugerencia_{index}"
+    plural_key = f"sugerencias_{index}"
+    return slide_content.get(singular_key, slide_content.get(plural_key, ""))
+
+
 
 
 def replace_placeholders(slide, replacements):
@@ -369,33 +375,50 @@ def generar_contenido_slide(slide_item, data, logo_stream):
 
     # Diccionario de reemplazos
     desc_val = str(slide_content.get("desc", "") or "")
+    is_invgate = product_type.lower() in {"invgate", "invgate.asj"}
+    if is_invgate:
+        work_n = str(
+            slide_content.get(
+                "work_n",
+                slide_content.get("{{ph_work_n}}", slide_content.get("workstation", "")),
+            )
+            or ""
+        )
+        work_t = str(
+            slide_content.get("work_t", slide_content.get("{{ph_work_t}}", "")) or ""
+        )
+    else:
+        work_t = ""
+        work_n = ""
     replacements = {
         "{{ph_titulo}}": slide_content.get("titulo", ""),
         "{{ph_periodo}}": periodo,
-        "{{ph_title_1}}": slide_content.get("title_1", ""),
+        "{{ph_title_1}}": str(slide_content.get("title_1", "") or "").upper(),
         "{{ph_kpis_1}}": normalize_kpi_text(slide_content.get("kpis_1", ""), 250),
-        "{{ph_title_2}}": slide_content.get("title_2", ""),
+        "{{ph_title_2}}": str(slide_content.get("title_2", "") or "").upper(),
         "{{ph_kpis_2}}": normalize_kpi_text(slide_content.get("kpis_2", ""), 250),
-        "{{ph_title_3}}": slide_content.get("title_3", ""),
+        "{{ph_title_3}}": str(slide_content.get("title_3", "") or "").upper(),
         "{{ph_kpis_3}}": normalize_kpi_text(slide_content.get("kpis_3", ""), 250),
-        "{{ph_title_4}}": slide_content.get("title_4", ""),
+        "{{ph_title_4}}": str(slide_content.get("title_4", "") or "").upper(),
         "{{ph_kpis_4}}": normalize_kpi_text(slide_content.get("kpis_4", ""), 250),
         "{{ph_pie_l}}": feet_l,
         "{{ph_pie_r}}": feet_r,
         # Asegura que desc nunca sea None
         "{{ph_desc}}": desc_val,
+        "{{ph_work_t}}": work_t,
+        "{{ph_work_n}}": work_n,
         # Sugerencias (opcionales, vacío si no vienen)
         "{{ph_sugerencia_1}}": normalize_suggestion_text(
-            slide_content.get("sugerencia_1", ""), 200
+            _get_suggestion_value(slide_content, 1), 200
         ),
         "{{ph_sugerencia_2}}": normalize_suggestion_text(
-            slide_content.get("sugerencia_2", ""), 200
+            _get_suggestion_value(slide_content, 2), 200
         ),
         "{{ph_sugerencia_3}}": normalize_suggestion_text(
-            slide_content.get("sugerencia_3", ""), 200
+            _get_suggestion_value(slide_content, 3), 200
         ),
         "{{ph_sugerencia_4}}": normalize_suggestion_text(
-            slide_content.get("sugerencia_4", ""), 200
+            _get_suggestion_value(slide_content, 4), 200
         ),
     }
     print(f"Reemplazos para slide de contenido ({product_type}): {replacements}")
@@ -419,14 +442,25 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     for tf, key in modified:
         key_l = key.lower()
         flags = tf_flags.setdefault(
-            id(tf), {"tf": tf, "titulo": False, "kpis": False, "sugerencia": False}
+            id(tf), {
+                "tf": tf,
+                "titulo": False,
+                "title": False,
+                "kpis": False,
+                "sugerencia": False,
+                "work": False,
+            }
         )
         if "titulo" in key_l:
             flags["titulo"] = True
+        if "title_" in key_l:
+            flags["title"] = True
         if "kpis" in key_l:
             flags["kpis"] = True
         if "sugerencia" in key_l:
             flags["sugerencia"] = True
+        if "work_t" in key_l or "work_n" in key_l:
+            flags["work"] = True
 
     for flags in tf_flags.values():
         tf = flags["tf"]
@@ -434,7 +468,18 @@ def generar_contenido_slide(slide_item, data, logo_stream):
             apply_text_formatting(tf, font_name="Aptos", size=28)
             continue
 
-        if flags["sugerencia"] or flags["kpis"] or "title" in key_l:
+        if flags["title"] and not (flags["kpis"] or flags["sugerencia"]):
+            apply_text_formatting(tf, font_name="Aptos", size=10, set_line=False)
+            for p in tf.paragraphs:
+                p.alignment = PP_ALIGN.LEFT
+                p.space_before = Pt(0)
+                p.space_after = Pt(0)
+                p.line_spacing = 1.15
+                for run in p.runs:
+                    run.font.bold = True
+            continue
+
+        if flags["sugerencia"] or flags["kpis"] or flags["work"]:
             apply_text_formatting(tf, font_name="Aptos", size=10, set_line=False)
             for p in tf.paragraphs:
                 p.alignment = PP_ALIGN.LEFT
@@ -483,7 +528,7 @@ def generar_slide_producto(
     # Definir campos por tipo de producto
     campos_por_tipo = {
         "uas": ["usu_per", "usu_esp", "solicitudes", "revalida"],
-        "beyondtrust": ["pra", "rs", "ps", "adb", "epm"],
+        "beyondtrust": ["pra", "rs", "pws", "adb", "epm"],
         "whalemate": ["sim", "aca", "ana", "grh", "cad"],
         "wazuh": ["ddv", "snc", "enc", "ecn", "iav"], # Incluir ambos por compatibilidad
         "invgate": ["isd", "iam"],
@@ -553,7 +598,7 @@ def generar_slide_producto(
     # apply_text_formatting NO debe tocar bold en estos campos.
     CAMPOS_CON_NEGRITA = {
         "usu_per", "usu_esp", "solicitudes", "revalida",
-        "pra", "rs", "ps", "adb", "epm",
+        "pra", "rs", "pws", "adb", "epm",
         "sim", "aca", "ana", "grh", "cad",
         "ddv", "snc", "enc", "iav",
         "isd", "iam", "resumen",

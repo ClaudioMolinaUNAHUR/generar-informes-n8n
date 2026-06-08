@@ -6,7 +6,15 @@ from datetime import datetime, timedelta
 import locale
 
 DATA_DIR = "/data"
-slide_info = ["resumen", "sugerencia_1", "sugerencia_2", "sugerencia_3 "]
+slide_info = [
+    "resumen",
+    "sugerencia_1",
+    "sugerencia_2",
+    "sugerencia_3",
+    "desc",
+    "work_t",
+    "work_n",
+]
 
 
 MESES_ES = {
@@ -64,7 +72,10 @@ def build_slide(product, product_name, chart_definitions, pointer_resume, resume
         "sugerencia_1": "",
         "sugerencia_2": "",
         "sugerencia_3": "",
+        "work_t": "",
+        "work_n": "",
         "charts": {},
+        "desc": resume,
     }
     # 2. Inicializamos dinámicamente los contenedores para los datos de los gráficos.
     chart_data = {
@@ -85,9 +96,7 @@ def build_slide(product, product_name, chart_definitions, pointer_resume, resume
         if semana_key in slide_info:
             valor = semana.get(pointer_resume, "")
             build[semana_key] += valor if valor != "null" else ""
-        else:
-            if semana_key == "sugerencia_3":
-                break
+        elif semana_key.startswith("Semana"):
             for chart_name, series_def in chart_definitions.items():
                 for serie_name, json_key in series_def.items():
                     val = semana.get(json_key, 0)
@@ -241,7 +250,7 @@ def main():
     # with open("salida.json", "w", encoding="utf-8") as f:
     #     json.dump({"data": main}, f, indent=2, ensure_ascii=False)
 
-    print(json.dumps({"status": "ok", "output_file": data["main"]}, ensure_ascii=False))
+    print(json.dumps({"status": "ok", "output_file": main}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

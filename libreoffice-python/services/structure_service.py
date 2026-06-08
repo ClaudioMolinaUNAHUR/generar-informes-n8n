@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+import re
+import unicodedata
 
 MESES_ES = {
     1: "Enero", 2: "Febrero", 3: "Marzo", 4: "Abril", 5: "Mayo", 6: "Junio",
@@ -82,13 +84,74 @@ def _chart_internal(values, name, build, kpis, show_zeros=False):
 # Nombres de charts que deben mostrar KPIs aunque su valor sea 0
 CHARTS_SHOW_ZEROS = {"takedown_estado_resolucion"}
 
+
+def _normalize_field_name(value):
+    text = str(value or "").strip().lower()
+    text = "".join(
+        c for c in unicodedata.normalize("NFKD", text) if not unicodedata.combining(c)
+    )
+    return re.sub(r"\s+", " ", text)
+
+
+def _normalize_field_name_loose(value):
+    base = _normalize_field_name(value)
+    tokens = []
+    for tok in base.split(" "):
+        # Tolerar singular/plural en encabezados del origen (usuario/usuarios, etc.)
+        if len(tok) > 3 and tok.endswith("s"):
+            tok = tok[:-1]
+        tokens.append(tok)
+    return " ".join(tokens)
+
+
+def _field_candidates(field_def):
+    if isinstance(field_def, (list, tuple)):
+        return [str(v) for v in field_def if v is not None]
+    return [str(field_def)]
+
+
+def _get_week_value(week_row, field_def, default=0):
+    candidates = _field_candidates(field_def)
+
+    # 1) Intento exacto primero.
+    for candidate in candidates:
+        if candidate in week_row:
+            return week_row.get(candidate, default)
+
+    # 2) Fallback normalizado: ignora tildes, mayúsculas y espacios duplicados.
+    normalized_week = {
+        _normalize_field_name(k): v for k, v in week_row.items() if isinstance(k, str)
+    }
+    for candidate in candidates:
+        val = normalized_week.get(_normalize_field_name(candidate))
+        if val is not None:
+            return val
+
+    # 3) Fallback flexible: tolera plural/singular simple por token.
+    normalized_week_loose = {
+        _normalize_field_name_loose(k): v for k, v in week_row.items() if isinstance(k, str)
+    }
+    for candidate in candidates:
+        val = normalized_week_loose.get(_normalize_field_name_loose(candidate))
+        if val is not None:
+            return val
+
+    return default
+
+
+def _primary_field_name(field_def):
+    candidates = _field_candidates(field_def)
+    return candidates[0] if candidates else ""
+
 def build_slide_structure(product_data, product_name, chart_definitions, pointer_resume, resume, fecha: datetime = None, logo: str = ""):
     product_name_clean = product_name.split(".")[0]
     build = {
         "titulo": product_name_clean.upper(),
         "resumen": resume + "\n",
         "periodo": fecha_portada(fecha, logo) if fecha else "",
-        "sugerencia_1": "", "sugerencia_2": "", "sugerencia_3": "",
+        "sugerencia_1": "", "sugerencia_2": "", "sugerencia_3": "", "sugerencia_4": "",
+        "work_t": "",
+        "work_n": "",
         "charts": {},
         "desc": resume,
     }
@@ -104,13 +167,26 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
     }
 
     all_series = {
-        serie: json_key
+        serie: _primary_field_name(json_key)
         for series in chart_definitions.values()
         for serie, json_key in series.items()
     }
 
     kpis = {}
-    slide_info_fields = ["resumen", "sugerencia_1", "sugerencia_2", "sugerencia_3", "desc"]
+    slide_info_fields = [
+        "resumen",
+        "sugerencia_1",
+        "sugerencias_1",
+        "sugerencia_2",
+        "sugerencias_2",
+        "sugerencia_3",
+        "sugerencias_3",
+        "sugerencia_4",
+        "sugerencias_4",
+        "desc",
+        "work_t",
+        "work_n",
+    ]
 
     for semana in product_data:
         print("[DEBUG] Semana procesada:", semana)
@@ -118,14 +194,15 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
 
         if semana_key in slide_info_fields:
             valor = semana.get(pointer_resume, "")
-            build[semana_key] += str(valor) if valor != "null" else ""
+            target_key = semana_key.replace("sugerencias_", "sugerencia_")
+            build[target_key] += str(valor) if valor != "null" else ""
         elif semana_key.startswith("Semana"):
             for chart_name, series_def in chart_definitions.items():
                 for serie_name, json_key in series_def.items():
                     if len(chart_data[chart_name][serie_name]) >= MAX_CHART_WEEKS:
                         continue
                     try:
-                        val = int(float(semana.get(json_key, 0)))
+                        val = int(float(_get_week_value(semana, json_key, 0)))
                     except:
                         val = 0
                     chart_data[chart_name][serie_name].append(val)

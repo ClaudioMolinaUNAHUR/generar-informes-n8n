@@ -1,16 +1,16 @@
 {
-  "pws": {
+  "password_safe(PWS)": {
     "bt_aperturas_cred": "PWS - Aperturas de credenciales",
     "bt_rotacion": "PWS - Rotación credenciales",
     "bt_autorizaciones": "PWS - autorizaciones",
     "bt_credenciales": "PWS - Cantidad credenciales",
     "bt_revisiones": "PWS - Revisión sesiones"
   },
-  "pra": {
+  "privileged_remote_access(PRA)": {
     "bt_aperturas": "PRA - Aperturas",
     "bt_auth_pra": "PRA - Autorizaciones"
   },
-  "rs": {
+  "remote_support(RS)": {
     "bt_atenciones": "RS - Atenciones"
   },
   "soporte": {

@@ -7,11 +7,17 @@
     "wazuh_vuln_totales": "Vulnerabilidades Totales"
   },
   "alertas_controles": {
-    "wazuh_bloqueo_usuarios": "Bloqueo de usuarios",
-    "wazuh_cambios_firewall": "Login VPN",
-    "wazuh_admin_cuentas_windows": "Login Fallidos"
+    "wazuh_bloqueo_usuarios": "Bloqueo de usuario",
+    "wazuh_floodeo_agentes": "Floodeo agentes Wazuh",
+    "wazuh_creacion_tareas_programadas": "Creación de tareas programadas",
+    "wazuh_admin_cuentas_windows": "Administracion de cuentas Windows",
+    "wazuh_cambios_firewall": "Cambios en el firewall",
+    "wazuh_logon_fallidos": "Logon fallidos",
+    "wazuh_vpn_failed_logons": "VPN Failed Logons",
+    "wazuh_login_vpn": "Login VPN",
+    "wazuh_login_fallidos": "Login Fallidos"
   },
-    "soporte": {
+  "soporte": {
     "wazuh_vuln_resuelt": "Vulnerabilidades Resueltas",
     "wazuh_soporte": "Soporte",
     "wazuh_solicitudes": "Solicitudes (configuración, integraciones, fuentes)",

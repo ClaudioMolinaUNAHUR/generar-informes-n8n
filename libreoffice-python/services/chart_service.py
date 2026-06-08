@@ -50,9 +50,27 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
         ):
             series_keys.append(key)
 
+    def _normalize_series_vals(values, labels_len):
+        vals = list(values or [])
+        if len(vals) > labels_len:
+            vals = vals[:labels_len]
+        if len(vals) < labels_len:
+            vals.extend([0] * (labels_len - len(vals)))
+        return vals
+
+    def _has_visible_data(values):
+        return any(v not in (None, 0) for v in values)
+
+    # Mostrar solo series que realmente tienen datos (evita leyenda con series vacías).
+    visible_series_keys = []
+    for key in series_keys:
+        vals = _normalize_series_vals(chart_info.get(key), len(labels))
+        if _has_visible_data(vals):
+            visible_series_keys.append(key)
+
     if ctype == "bar":
         # Barras agrupadas: calcular offsets según cantidad de series
-        n = len(series_keys)
+        n = len(visible_series_keys)
         if n == 0:
             # nada que dibujar
             return
@@ -61,15 +79,13 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
         total_width = 0.7
         bar_width = total_width / n
 
-        for idx, key in enumerate(series_keys):
+        for idx, key in enumerate(visible_series_keys):
             vals = list(chart_info.get(key) or [])
             if len(vals) > len(labels):
                 log(
                     f"DEBUG: create_matplotlib_chart - chart '{chart_title}' serie '{key}' tiene {len(vals)} valores pero labels {len(labels)}; truncando a labels"
                 )
-                vals = vals[: len(labels)]
-            if len(vals) < len(labels):
-                vals.extend([0] * (len(labels) - len(vals)))  # pad with 0
+            vals = _normalize_series_vals(vals, len(labels))
 
             label_full = flat_friendly_names.get(key, key.replace("_", " ").capitalize())
             # Dividir etiquetas largas en varias líneas para que no encojan el gráfico
@@ -94,7 +110,7 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
             fontsize=18,
         )
     elif ctype == "line":
-        for idx, key in enumerate(series_keys):
+        for idx, key in enumerate(visible_series_keys):
             vals = list(chart_info.get(key) or [])
             vals = vals[:len(labels)]  # truncate if longer
             if len(vals) < len(labels):
@@ -131,7 +147,7 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
     # Ajusta el layout para asegurar que la leyenda no se corte
     plt.tight_layout(rect=[0, 0.03, 0.95, 0.97])
     log(
-        f"DEBUG: create_matplotlib_chart - saving chart '{chart_title}' type={ctype} labels={labels} series_keys={series_keys}"
+        f"DEBUG: create_matplotlib_chart - saving chart '{chart_title}' type={ctype} labels={labels} series_keys={visible_series_keys}"
     )
     plt.savefig(output_file, dpi=150, transparent=True)
     plt.close()
