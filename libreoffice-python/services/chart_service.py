@@ -10,6 +10,28 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
     plt.figure(figsize=(10, 5))
     ctype = chart_info.get("type")
     chart_title = chart_info.get("title") or chart_info.get("titulo") or "<no title>"
+    use_adaptive_scale = False
+
+    def _normalized_chart_name(value):
+        return re.sub(r"\s+", " ", str(value or "").replace("_", " ").strip().lower())
+
+    def _compact_tick_label(value, _pos=None):
+        abs_value = abs(value)
+        if abs_value >= 1_000_000:
+            return f"{value / 1_000_000:.1f}M"
+        if abs_value >= 1_000:
+            return f"{value / 1_000:.0f}K"
+        return f"{int(value)}"
+
+    def _should_use_adaptive_scale(title, series_values):
+        if _normalized_chart_name(title) != "alertas controles":
+            return False
+        positives = [v for values in series_values for v in values if v and v > 0]
+        if len(positives) < 2:
+            return False
+        min_positive = min(positives)
+        max_positive = max(positives)
+        return min_positive > 0 and (max_positive / min_positive) >= 20
 
     # Título si viene en la definición del gráfico
     # title = chart_info.get("title") or chart_info.get("titulo") or ""
@@ -24,8 +46,15 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
     x = range(len(labels))
 
     # Mapa de etiquetas amigables para claves comunes
+    def _friendly_label(key, value):
+        if isinstance(value, dict):
+            return value.get("label") or value.get("title") or key.replace("_", " ").capitalize()
+        return value
+
     flat_friendly_names = {
-        key: value for chart in friendly_names.values() for key, value in chart.items()
+        key: _friendly_label(key, value)
+        for chart in friendly_names.values()
+        for key, value in chart.items()
     }
 
     # Paleta de colores para series (se rotan si hay más series)
@@ -78,6 +107,8 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
         ind = np.arange(len(labels))  # posiciones base
         total_width = 0.7
         bar_width = total_width / n
+        plotted_series = []
+        use_adaptive_scale = False
 
         for idx, key in enumerate(visible_series_keys):
             vals = list(chart_info.get(key) or [])
@@ -86,6 +117,7 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
                     f"DEBUG: create_matplotlib_chart - chart '{chart_title}' serie '{key}' tiene {len(vals)} valores pero labels {len(labels)}; truncando a labels"
                 )
             vals = _normalize_series_vals(vals, len(labels))
+            plotted_series.append(vals)
 
             label_full = flat_friendly_names.get(key, key.replace("_", " ").capitalize())
             # Dividir etiquetas largas en varias líneas para que no encojan el gráfico
@@ -99,8 +131,25 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
             plt.bar(positions, vals, bar_width * 0.95, label=label, color=color)
 
         # Ajustar ticks al centro de los grupos
-        plt.xticks(ind, labels, rotation=0, fontsize=16)
+        use_adaptive_scale = _should_use_adaptive_scale(chart_title, plotted_series)
+        display_labels = labels
+        x_tick_fontsize = 16
+        if use_adaptive_scale:
+            x_tick_fontsize = 14
+
+        plt.xticks(ind, display_labels, rotation=0, fontsize=x_tick_fontsize)
         plt.grid(axis="y", linestyle="-", color="#dcdcdc", linewidth=0.8)
+        if use_adaptive_scale:
+            positive_values = [v for values in plotted_series for v in values if v and v > 0]
+            ax = plt.gca()
+            ax.set_yscale("symlog", linthresh=max(1, min(positive_values)))
+            tick_values = [0, min(positive_values), max(positive_values)]
+            if len(positive_values) > 1:
+                tick_values.insert(2, int(np.median(positive_values)))
+            tick_values = sorted(set(tick_values))
+            ax.set_yticks(tick_values)
+            ax.yaxis.set_major_formatter(mtick.FuncFormatter(_compact_tick_label))
+            ax.tick_params(axis="y", labelsize=14)
         # Leyenda a la derecha, centrada verticalmente
         plt.legend(
             loc="center left",
@@ -129,14 +178,14 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
 
     # Formato eje Y con separador de miles y margen superior
     try:
-        import matplotlib.ticker as mtick
         ax = plt.gca()
 
-        # Fuerza a que los ticks sean solo números enteros
-        ax.yaxis.set_major_locator(mtick.MaxNLocator(integer=True))
+        if not use_adaptive_scale:
+            # Fuerza a que los ticks sean solo números enteros
+            ax.yaxis.set_major_locator(mtick.MaxNLocator(integer=True))
 
-        # Formateador con separador de miles
-        ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, pos: f"{int(x):,}"))
+            # Formateador con separador de miles
+            ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, pos: f"{int(x):,}"))
 
         # Agregar margen superior: 20% por encima del valor máximo
         current_ylim = ax.get_ylim()

@@ -60,10 +60,14 @@ def fecha_portada(fecha: datetime, logo: str) -> str:
     return f"{anio}\n{primer_dia.strftime('%d/%m')} - {ultimo_dia.strftime('%d/%m')}"
 
 
-def _chart_internal(values, name, build, kpis, show_zeros=False):
+def _chart_internal(values, name, build, kpis, series_defs, show_zeros=False):
     total = 0
     for v in values:
-        count = sum(values[v])
+        series_values = values[v]
+        if v == "bt_credenciales":
+            count = series_values[-1] if series_values else 0
+        else:
+            count = sum(series_values)
         total += count
         if count > 0:
             kpis[v] = count
@@ -74,10 +78,15 @@ def _chart_internal(values, name, build, kpis, show_zeros=False):
     chart_res = {"name": name, "used": total > 0, "show_zeros": show_zeros}
     if total > 0:
         labels = [f"Semana {i+1}" for i in range(MAX_CHART_WEEKS)]
+        visible_values = {
+            serie_name: serie_values
+            for serie_name, serie_values in values.items()
+            if _show_series_in_chart(series_defs.get(serie_name))
+        }
         build["charts"][name] = {
             "type": "bar",
             "labels": labels,
-            **values,
+            **visible_values,
         }
     return chart_res
 
@@ -105,9 +114,23 @@ def _normalize_field_name_loose(value):
 
 
 def _field_candidates(field_def):
+    if isinstance(field_def, dict):
+        field_def = field_def.get("field") or field_def.get("fields") or field_def.get("label")
     if isinstance(field_def, (list, tuple)):
         return [str(v) for v in field_def if v is not None]
     return [str(field_def)]
+
+
+def _series_label(field_def, fallback):
+    if isinstance(field_def, dict):
+        return str(field_def.get("label") or field_def.get("title") or fallback)
+    return fallback
+
+
+def _show_series_in_chart(field_def):
+    if isinstance(field_def, dict):
+        return field_def.get("chart", True)
+    return True
 
 
 def _get_week_value(week_row, field_def, default=0):
@@ -167,7 +190,7 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
     }
 
     all_series = {
-        serie: _primary_field_name(json_key)
+        serie: _series_label(json_key, _primary_field_name(json_key))
         for series in chart_definitions.values()
         for serie, json_key in series.items()
     }
@@ -211,7 +234,16 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
     print("[DEBUG] chart_data recolectado:", chart_data)
     for chart_name, data in chart_data.items():
         show_zeros = chart_name in CHARTS_SHOW_ZEROS
-        chart_names_used.append(_chart_internal(data, chart_name, build, kpis, show_zeros=show_zeros))
+        chart_names_used.append(
+            _chart_internal(
+                data,
+                chart_name,
+                build,
+                kpis,
+                chart_definitions.get(chart_name, {}),
+                show_zeros=show_zeros,
+            )
+        )
     print("[DEBUG] chart_names_used:", chart_names_used)
 
     # Lógica de limpieza para soporte solo
