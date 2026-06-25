@@ -120,6 +120,21 @@ def replace_placeholders(slide, replacements):
             # Limpiar runs del nuevo párrafo clonado
             for r in new_p.findall(qn("a:r")):
                 new_p.remove(r)
+            
+            # Reducir espacios en párrafos clonados para evitar separación excesiva
+            pPr = new_p.find(qn("a:pPr"))
+            if pPr is not None:
+                # Buscar y remover espacios antes/después
+                spcBef = pPr.find(qn("a:spcBef"))
+                if spcBef is not None:
+                    pPr.remove(spcBef)
+                spcAft = pPr.find(qn("a:spcAft"))
+                if spcAft is not None:
+                    pPr.remove(spcAft)
+                # Crear nuevos espacios minimales
+                spcAft_new = etree.SubElement(pPr, qn("a:spcAft"))
+                spcAft_new.set("val", "0")
+            
             _write_line_to_p(new_p, line)
             insert_after.addnext(new_p)
             insert_after = new_p
@@ -165,6 +180,21 @@ def replace_placeholders(slide, replacements):
                     new_p = copy.deepcopy(first_para._p)
                     for r in new_p.findall(qn("a:r")):
                         new_p.remove(r)
+                    
+                    # Reducir espacios en párrafos clonados para evitar separación excesiva
+                    pPr = new_p.find(qn("a:pPr"))
+                    if pPr is not None:
+                        # Buscar y remover espacios antes/después
+                        spcBef = pPr.find(qn("a:spcBef"))
+                        if spcBef is not None:
+                            pPr.remove(spcBef)
+                        spcAft = pPr.find(qn("a:spcAft"))
+                        if spcAft is not None:
+                            pPr.remove(spcAft)
+                        # Crear nuevo espacio minimal
+                        spcAft_new = etree.SubElement(pPr, qn("a:spcAft"))
+                        spcAft_new.set("val", "0")
+                    
                     r_el = etree.SubElement(new_p, qn("a:r"))
                     rPr = etree.SubElement(r_el, qn("a:rPr"), attrib={"lang": "es-AR", "dirty": "0"})
                     if item.get("bold", False):
@@ -216,7 +246,9 @@ def replace_placeholders(slide, replacements):
         paras_to_remove = []
         for para in tf.paragraphs:
             para_text = _rebuild_para_text(para).strip()
-            if not para_text:
+            # No eliminar párrafos con espacio no-rompible (separadores intencionales)
+            raw_text = _rebuild_para_text(para)
+            if not para_text and "\u00a0" not in raw_text:
                 paras_to_remove.append(para._p)
         for p_elem in paras_to_remove:
             log(f"DEBUG: replace_placeholders - Limpiando párrafo vacío en shape '{shape.name}'")
@@ -338,6 +370,29 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     if num_charts == 0:
         # No crear la hoja si no hay gráficos
         return None
+    
+    # Obtener product_type al inicio para verificar work_t/work_n
+    product_type = slide_item.get("type")
+    
+    # Verificar si hay work_t o work_n para invgate.asj
+    is_invgate_asj = product_type.lower() == "invgate.asj"
+    has_work_data = False
+    if is_invgate_asj:
+        work_n = str(
+            slide_content.get(
+                "work_n",
+                slide_content.get("{{ph_work_n}}", slide_content.get("workstation", "")),
+            )
+            or ""
+        )
+        work_t = str(
+            slide_content.get("work_t", slide_content.get("{{ph_work_t}}", "")) or ""
+        )
+        has_work_data = bool(work_t or work_n)
+    
+    # Seleccionar plantilla
+    if is_invgate_asj and has_work_data:
+        template_file = "plantilla_contenido_work.pptx"
     elif num_charts == 1:
         template_file = "plantilla_contenido_1.pptx"
     elif num_charts == 2:
@@ -347,7 +402,7 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     else:
         # Si hay más de 4, usar la plantilla de 4 gráficos
         template_file = "plantilla_contenido_4.pptx"
-    print(f"Generando slide de contenido para {slide_item.get('type')} con {num_charts} gráficos usando plantilla {template_file}")
+    print(f"Generando slide de contenido para {product_type} con {num_charts} gráficos usando plantilla {template_file}")
 
     prs = Presentation(f"{DATA_DIR}/plantillas/{template_file}")
 
@@ -355,7 +410,6 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     slide = prs.slides[0]
 
     # Cargamos los nombres amigables para las leyendas de los gráficos
-    product_type = slide_item.get("type")
     friendly_names = {}
     try:
         with open(
@@ -377,16 +431,21 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     desc_val = str(slide_content.get("desc", "") or "")
     is_invgate = product_type.lower() in {"invgate", "invgate.asj"}
     if is_invgate:
-        work_n = str(
-            slide_content.get(
-                "work_n",
-                slide_content.get("{{ph_work_n}}", slide_content.get("workstation", "")),
+        # Solo recalcular si no fue hecho en la selección de plantilla
+        if not is_invgate_asj:
+            work_n = str(
+                slide_content.get(
+                    "work_n",
+                    slide_content.get("{{ph_work_n}}", slide_content.get("workstation", "")),
+                )
+                or ""
             )
-            or ""
-        )
-        work_t = str(
-            slide_content.get("work_t", slide_content.get("{{ph_work_t}}", "")) or ""
-        )
+            work_t = str(
+                slide_content.get("work_t", slide_content.get("{{ph_work_t}}", "")) or ""
+            ).upper()
+        else:
+            # Ya fueron calculados, solo aplicar upper() a work_t
+            work_t = work_t.upper()
     else:
         work_t = ""
         work_n = ""
@@ -491,6 +550,12 @@ def generar_contenido_slide(slide_item, data, logo_stream):
                 if p.text.strip().upper() == "SUGERENCIAS:":
                     for run in p.runs:
                         run.font.italic = True
+                
+                # Aplicar negrita y subrayado a work_t y work_n
+                if flags["work"]:
+                    for run in p.runs:
+                        run.font.bold = True
+                        run.font.underline = True
             continue
 
         # Cambia el tamaño de fuente solo para axur y plantilla_axur.pptx
@@ -535,6 +600,7 @@ def generar_slide_producto(
         "invgate.asj": ["isd", "iam"],
         "axur": ["pdm", "th", "cti", "fdd", "ddw", "tkd"],
         "akurtech": ["tra", "pgs", "lgn", "rfg", "alr", "bwl", "rdc", "rdt", "rdp", "rdl"],
+        "sonarqube": ["sca", "pdc", "shv", "cyd", "icc"],
     }
 
     # Mapear product_type a grupo
@@ -545,6 +611,7 @@ def generar_slide_producto(
         "{{ph_resume}}": resumen, # Compatibilidad con plantillas en inglés/mixtas
         "{{ph_pie_l}}": data.get("pie_l", ""),
         "{{ph_pie_r}}": data.get("pie_r", ""),
+        "{{ph_sugerencia_version}}": data.get("sugerencia_version", ""),
     }
 
     # Agregar "VERSION:" como línea antes del resumen en el placeholder
@@ -572,10 +639,33 @@ def generar_slide_producto(
         replacements["{{ph_resumen}}"] = res_text
         replacements["{{ph_resume}}"] = res_text
 
-    # Agregar los campos nuevos si corresponden
+    # Agregar los campos de módulo con separador visual entre cada uno.
+    # Se agrega \n + espacio no-rompible (\u00a0) al final de cada valor para
+    # generar un párrafo separador en blanco entre bloques.
+    # ph_resumen, ph_resume y ph_sugerencia_version NO llevan ese separador.
+    _CAMPOS_SIN_SEPARADOR = {"resumen", "resume", "sugerencia_version"}
     if tipo_grupo:
         for campo in campos_por_tipo[tipo_grupo]:
-            replacements[f"{{{{ph_{campo}}}}}"] = data.get(campo, "")
+            valor = data.get(campo, "")
+            if campo not in _CAMPOS_SIN_SEPARADOR and valor:
+                valor = valor + "\n\u00a0"
+            replacements[f"{{{{ph_{campo}}}}}"] = valor
+
+    # Detectar párrafos que originalmente son placeholders de módulos.
+    # Luego del reemplazo, solo esos párrafos recibirán espaciado extra.
+    module_placeholder_keys = (
+        {f"{{{{ph_{campo}}}}}" for campo in campos_por_tipo.get(tipo_grupo, [])}
+        if tipo_grupo
+        else set()
+    )
+    module_paragraph_ids = set()
+    if module_placeholder_keys:
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            for p in shape.text_frame.paragraphs:
+                if (p.text or "").strip() in module_placeholder_keys:
+                    module_paragraph_ids.add(id(p._p))
 
     # Quitar negritas heredadas del template ANTES de reemplazar,
     # para no pisar la negrita que _set_para_with_bold_labels va a aplicar.
@@ -603,7 +693,6 @@ def generar_slide_producto(
         "ddv", "snc", "enc", "iav",
         "isd", "iam", "resumen",
     }
-
     for tf, key in modified:
         key_l = key.lower()
         campo = key_l.replace("{{ph_", "").replace("}}", "")
@@ -637,6 +726,17 @@ def generar_slide_producto(
             # Para axur y akurtech se usa tamaño 11 en lugar de 12.
             campo_font_size = 11 if base_type in ("axur", "akurtech") else 12
             apply_text_formatting(tf, font_name="Aptos", size=campo_font_size)
+
+    # Espaciado visual entre módulos solo en párrafos de módulos detectados.
+    # No aplica para akurtech.
+    if module_paragraph_ids:
+        space_after = Pt(0) if base_type == "akurtech" else Pt(16)
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            for p in shape.text_frame.paragraphs:
+                if id(p._p) in module_paragraph_ids:
+                    p.space_after = space_after
 
     output = f"{DATA_DIR}/pptx-parts/producto_{product_type}.pptx"
     _prepare_output_file(output)

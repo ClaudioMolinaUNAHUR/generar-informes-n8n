@@ -16,7 +16,7 @@ def ultimo_dia_mes(dt: datetime) -> datetime:
 
 MAX_CHART_WEEKS = 4
 
-LOGO_ZAR = "zar.png"
+LOGO_SAR = "sar.png"
 
 
 def procesa_fecha_portada(fecha_str: str, logo: str) -> str:
@@ -24,9 +24,9 @@ def procesa_fecha_portada(fecha_str: str, logo: str) -> str:
     Recibe fecha_portada del JSON de entrada (formato "YYYY-MM") y el logo,
     parsea la fecha y delega en fecha_portada para generar el periodo formateado.
 
-    Ejemplo:
-      procesa_fecha_portada("2026-05", "zar.png")  →  "2026\\n26/04 - 25/05"
-      procesa_fecha_portada("2026-05", "otro.png") →  "2026\\n01/05 - 31/05"
+        Ejemplo:
+            procesa_fecha_portada("2026-05", "sar.png")  →  "2026\\n26/04 - 26/05"
+            procesa_fecha_portada("2026-05", "otro.png") →  "2026\\n01/05 - 31/05"
     """
     try:
         fecha = datetime.strptime(fecha_str.strip(), "%Y-%m")
@@ -40,18 +40,18 @@ def fecha_portada(fecha: datetime, logo: str) -> str:
     Devuelve el periodo de la portada según el logo.
 
     - Caso general:  año\\nDD/MM - DD/MM  (primer y último día del mes)
-    - Caso zar.png:  año\\nDD/MM - DD/MM  (día 26 del mes anterior al día 25 del mes)
+    - Caso sar.png:  año\\nDD/MM - DD/MM  (día 26 del mes anterior al día 26 del mes)
 
     Ejemplos:
       fecha=junio-2026, logo=cualquiera  →  "2026\\n01/06 - 30/06"
-      fecha=junio-2026, logo=zar.png     →  "2026\\n26/05 - 25/06"
+    fecha=junio-2026, logo=sar.png     →  "2026\\n26/05 - 26/06"
     """
     anio = fecha.year
 
-    if logo and logo.strip().lower() == LOGO_ZAR:
-        # Periodo: día 26 del mes anterior → día 25 del mes actual
+    if logo and logo.strip().lower() == LOGO_SAR:
+        # Periodo: día 26 del mes anterior → día 26 del mes actual
         primer_dia = (fecha.replace(day=1) - timedelta(days=1)).replace(day=26)
-        ultimo_dia = fecha.replace(day=25)
+        ultimo_dia = fecha.replace(day=26)
     else:
         # Periodo: primer y último día del mes
         primer_dia = fecha.replace(day=1)
@@ -271,10 +271,6 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
                         build[kpi_key] += f"{nombre_amigable}: {kpis[serie_name]}\n"
             except Exception as e:
                 print(f"[ERROR] Al procesar KPIs/titles para chart '{c_res['name']}': {e}")
-            if c_res["name"] != "soporte":
-                sug_val = build.get(f"sugerencia_{position}", "")
-                if sug_val:
-                    build[kpi_key] += f"SUGERENCIAS: {sug_val}"
             position += 1
 
     return build

@@ -145,78 +145,69 @@ def normalize_input(data) -> dict:
 
 def generate_grafs(data) -> dict:
     """
-    Genera los cuatro gráficos de torta a partir del dict de entrada.
+    Genera gráficos de torta a partir del dict de entrada.
 
     Acepta el payload como lista o dict, y claves con prefijo
     'graf_' o 'chart_' (compatibilidad con n8n).
 
-    Parámetros esperados (tras normalización):
+    Parámetros opcionales (tras normalización):
         graf_productos: { labels: [...], values: [...] }
         graf_horas:     { labels: [...], values: [...] }
         graf_clientes:  { labels: [...], values: [...] }
         graf_tickets:   { labels: [...], values: [...] }
 
-    Retorna un dict con las claves:
-        graf_productos_b64, graf_horas_b64, graf_clientes_b64, graf_tickets_b64
+    Retorna un dict con las claves de los gráficos efectivamente generados.
     """
     data = normalize_input(data)
 
-    required_keys = ("graf_productos", "graf_horas", "graf_clientes", "graf_tickets")
-    for key in required_keys:
-        if key not in data:
-            raise ValueError(f"Falta la clave '{key}' en el JSON de entrada")
-
-    cp = data["graf_productos"]
-    ch = data["graf_horas"]
-    cc = data["graf_clientes"]
-    ct = data["graf_tickets"]
-
     output = {}
 
-    # ── Gráfico 1: Productos ────────────────────────────────────────────────
-    fig, ax = plt.subplots(figsize=(9, 6), facecolor="white")
-    make_pie(
-        ax,
-        cp["labels"],
-        cp["values"],
-        "Porcentaje de atención por producto",
+    chart_specs = (
+        (
+            "graf_productos",
+            "graf_productos_b64",
+            "Porcentaje de atención por producto/área",
+            "atenciones",
+        ),
+        (
+            "graf_horas",
+            "graf_horas_b64",
+            "Porcentaje de horas trabajadas por persona",
+            "horas trabajadas",
+        ),
+        (
+            "graf_clientes",
+            "graf_clientes_b64",
+            "Porcentaje de atención por cliente",
+            "atenciones",
+        ),
+        (
+            "graf_tickets",
+            "graf_tickets_b64",
+            "Porcentaje de tickets trabajados esta semana",
+            "tickets",
+        ),
     )
-    output["graf_productos_b64"] = fig_to_b64(fig)
-    plt.close(fig)
 
-    # ── Gráfico 2: Horas por persona ────────────────────────────────────────
-    fig, ax = plt.subplots(figsize=(9, 6), facecolor="white")
-    make_pie(
-        ax,
-        ch["labels"],
-        ch["values"],
-        "Porcentaje de horas trabajadas por área",
-        unit="horas trabajadas",
-    )
-    output["graf_horas_b64"] = fig_to_b64(fig)
-    plt.close(fig)
+    for input_key, output_key, title, unit in chart_specs:
+        chart_data = data.get(input_key)
+        if not isinstance(chart_data, dict):
+            continue
 
-    # ── Gráfico 3: Clientes ─────────────────────────────────────────────────
-    fig, ax = plt.subplots(figsize=(9, 6), facecolor="white")
-    make_pie(
-        ax,
-        cc["labels"],
-        cc["values"],
-        "Porcentaje de atención por cliente",
-    )
-    output["graf_clientes_b64"] = fig_to_b64(fig)
-    plt.close(fig)
+        labels = chart_data.get("labels")
+        values = chart_data.get("values")
 
-    # ── Gráfico 4: Tickets (Estados Abierto/Concluido) ──────────────────────
-    fig, ax = plt.subplots(figsize=(9, 6), facecolor="white")
-    make_pie(
-        ax,
-        ct["labels"],
-        ct["values"],
-        "Porcentaje de tickets trabajados esta semana",
-        unit="tickets",
-    )
-    output["graf_tickets_b64"] = fig_to_b64(fig)
-    plt.close(fig)
+        if not isinstance(labels, list) or not isinstance(values, list):
+            continue
+        if not labels or not values or len(labels) != len(values):
+            continue
+
+        fig, ax = plt.subplots(figsize=(9, 6), facecolor="white")
+        make_pie(ax, labels, values, title, unit=unit)
+        output[output_key] = fig_to_b64(fig)
+        plt.close(fig)
+
+    if not output:
+        raise ValueError("No se recibieron gráficos válidos para generar")
 
     return output

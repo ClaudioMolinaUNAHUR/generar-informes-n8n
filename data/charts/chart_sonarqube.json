@@ -1,0 +1,12 @@
+{
+  "vulnerabilidades": {
+    "Seguridad": "Seguridad",
+    "Security Review": "Security review"
+    }
+  },
+
+  "soporte": {
+    "Consultas Respondidas": "Consultas Respondidas",
+    "Monitoreos Realizados": "Monitoreos Realizados",
+    "Capacitaciones/ Asistencias": "Capacitaciones/ Asistencias"
+  }
