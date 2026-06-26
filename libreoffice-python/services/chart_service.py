@@ -32,14 +32,17 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file, target_size
         return f"{int(value)}"
 
     def _should_use_adaptive_scale(title, series_values):
-        if _normalized_chart_name(title) != "alertas controles":
-            return False
+        # Antes esto solo se activaba para el gráfico "Alertas Controles".
+        # Lo generalizamos: cualquier gráfico de barras donde una serie sea
+        # mucho más chica que otra (p.ej. 9 vs 26777) sufre el mismo problema
+        # de barras "invisibles" en escala lineal, así que aplicamos la
+        # misma corrección sin importar el nombre del gráfico.
         positives = [v for values in series_values for v in values if v and v > 0]
         if len(positives) < 2:
             return False
         min_positive = min(positives)
         max_positive = max(positives)
-        return min_positive > 0 and (max_positive / min_positive) >= 20
+        return min_positive > 0 and (max_positive / min_positive) >= 8
 
     # Título si viene en la definición del gráfico
     # title = chart_info.get("title") or chart_info.get("titulo") or ""
@@ -141,7 +144,14 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file, target_size
 
             offset = (idx - (n - 1) / 2) * bar_width
             positions = ind + offset
-            ax.bar(positions, vals, bar_width * 0.95, label=label, color=color)
+            ax.bar(positions, vals, bar_width * 0.95, label=label, color=color, edgecolor="none", zorder=3)
+
+        # Estética general: sacar bordes superior/derecho y suavizar el resto
+        # para que el gráfico se vea más liviano (no afecta colores de series).
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("#d9d9d9")
+        ax.spines["bottom"].set_color("#d9d9d9")
 
         use_adaptive_scale = _should_use_adaptive_scale(chart_title, plotted_series)
         # Preparar etiquetas X: acortar o romper para evitar solapamientos
@@ -167,18 +177,31 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file, target_size
         ax.set_xticks(ind)
         ax.set_xticklabels(display_labels, rotation=0, fontsize=x_tick_fontsize, ha="center")
         ax.set_axisbelow(True)
-        ax.grid(axis="y", linestyle="-", color="#dcdcdc", linewidth=0.8)
+        ax.grid(axis="y", linestyle="-", color="#ececec", linewidth=0.8, zorder=0)
         # Forzar tamaño de fuente constante para ticks e impedir solapamiento
         ax.tick_params(axis="x", labelsize=tick_fontsize)
         ax.tick_params(axis="y", labelsize=DEFAULT_Y_TICK_SIZE)
         if use_adaptive_scale:
             positive_values = [v for values in plotted_series for v in values if v and v > 0]
-            ax.set_yscale("symlog", linthresh=max(1, min(positive_values)))
-            tick_values = [0, min(positive_values), max(positive_values)]
-            if len(positive_values) > 1:
-                tick_values.insert(2, int(np.median(positive_values)))
+            min_positive = min(positive_values)
+            max_positive = max(positive_values)
+            # linthresh marca el límite entre la zona lineal (cerca de 0) y la
+            # logarítmica: lo fijamos en la potencia de 10 más cercana al valor
+            # mínimo positivo para que las barras chicas no queden pegadas al 0.
+            linthresh = max(1, 10 ** np.floor(np.log10(min_positive)))
+            ax.set_yscale("symlog", linthresh=linthresh)
+
+            # Ticks en potencias de 10 entre el linthresh y el máximo: se ven
+            # parejos y prolijos en vez de saltar entre min/mediana/max.
+            decade_start = int(np.floor(np.log10(linthresh)))
+            decade_end = int(np.ceil(np.log10(max_positive)))
+            tick_values = [0] + [10 ** d for d in range(decade_start, decade_end + 1)]
+            if max_positive not in tick_values:
+                tick_values.append(max_positive)
             tick_values = sorted(set(tick_values))
+
             ax.set_yticks(tick_values)
+            ax.set_ylim(0, max_positive * 1.25)
             ax.yaxis.set_major_formatter(mtick.FuncFormatter(_compact_tick_label))
             ax.tick_params(axis="y", labelsize=max(8, tick_fontsize - 2))
 
@@ -214,21 +237,52 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file, target_size
             label = textwrap.fill(label_full, width=20)
 
             color = palette[idx % len(palette)]
-            ax.plot(x, vals, label=label, marker="o", color=color)
+            ax.plot(x, vals, label=label, marker="o", markersize=5, linewidth=2.2, color=color, zorder=3)
+
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("#d9d9d9")
+        ax.spines["bottom"].set_color("#d9d9d9")
 
         ax.set_xticks(x)
         ax.set_xticklabels(labels, rotation=45, fontsize=tick_fontsize)
-        ax.grid(axis="y", linestyle="-", color="#dcdcdc", linewidth=0.8)
+        ax.set_axisbelow(True)
+        ax.grid(axis="y", linestyle="-", color="#ececec", linewidth=0.8, zorder=0)
         ax.legend(loc="best", fontsize=legend_fontsize)
 
     # Formato eje Y con separador de miles y margen superior
     try:
         if not use_adaptive_scale:
-            ax.yaxis.set_major_locator(mtick.MaxNLocator(integer=True))
-            ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, pos: f"{int(x):,}"))
+            # Usar MaxNLocator para obtener ticks "bonitos" (enteros) y
+            # formateador compacto para mostrar K/M de forma consistente.
+            locator = mtick.MaxNLocator(nbins=6, integer=True)
+            ax.yaxis.set_major_locator(locator)
+            ax.yaxis.set_major_formatter(mtick.FuncFormatter(_compact_tick_label))
+
+            # A veces MaxNLocator puede producir ticks muy cercanos o con
+            # valores repetidos tras el redondeo; deduplicarlos para evitar
+            # etiquetas idénticas (ej. dos '2K').
+            try:
+                raw_ticks = list(ax.get_yticks())
+                # Deduplicar en base a la etiqueta final que se mostrará
+                # (p.ej. '2K'). Así evitamos que dos ticks distintos que
+                # formatean a la misma etiqueta aparezcan repetidos.
+                seen_labels = set()
+                unique_ticks = []
+                for t in raw_ticks:
+                    lbl = _compact_tick_label(t)
+                    if lbl not in seen_labels:
+                        seen_labels.add(lbl)
+                        unique_ticks.append(t)
+                if len(unique_ticks) >= 2:
+                    ax.set_yticks(unique_ticks)
+            except Exception:
+                pass
 
         current_ylim = ax.get_ylim()
-        ax.set_ylim(current_ylim[0], current_ylim[1] * 1.15)
+        # Asegurar un límite superior razonable y evitar que el tope sea 0
+        new_upper = max(current_ylim[1] * 1.15, 1)
+        ax.set_ylim(current_ylim[0], new_upper)
     except Exception:
         pass
 

@@ -479,6 +479,13 @@ def generar_contenido_slide(slide_item, data, logo_stream):
         "{{ph_sugerencia_4}}": normalize_suggestion_text(
             _get_suggestion_value(slide_content, 4), 200
         ),
+        "{{ph_sugerencia_version}}": normalize_suggestion_text(
+            slide_content.get("sugerencia_version", ""), 200
+        ),
+        # Compatibilidad: algunas plantillas pueden tener el token sin {{}}
+        "sugerencia_version": normalize_suggestion_text(
+            slide_content.get("sugerencia_version", ""), 200
+        ),
     }
     print(f"Reemplazos para slide de contenido ({product_type}): {replacements}")
     print(f"Valor insertado en {{ph_desc}}: {desc_val}")
@@ -612,6 +619,8 @@ def generar_slide_producto(
         "{{ph_pie_l}}": data.get("pie_l", ""),
         "{{ph_pie_r}}": data.get("pie_r", ""),
         "{{ph_sugerencia_version}}": data.get("sugerencia_version", ""),
+        # Compatibilidad: algunas plantillas pueden tener el token sin {{}}
+        "sugerencia_version": data.get("sugerencia_version", ""),
     }
 
     # Agregar "VERSION:" como línea antes del resumen en el placeholder
@@ -639,16 +648,12 @@ def generar_slide_producto(
         replacements["{{ph_resumen}}"] = res_text
         replacements["{{ph_resume}}"] = res_text
 
-    # Agregar los campos de módulo con separador visual entre cada uno.
-    # Se agrega \n + espacio no-rompible (\u00a0) al final de cada valor para
-    # generar un párrafo separador en blanco entre bloques.
-    # ph_resumen, ph_resume y ph_sugerencia_version NO llevan ese separador.
-    _CAMPOS_SIN_SEPARADOR = {"resumen", "resume", "sugerencia_version"}
+    # Agregar los campos de módulo. El espaciado visual entre bloques se
+    # aplica más abajo vía space_after sobre el propio párrafo del módulo
+    # (ver "module_paragraph_ids"), sin agregar párrafos en blanco extra.
     if tipo_grupo:
         for campo in campos_por_tipo[tipo_grupo]:
             valor = data.get(campo, "")
-            if campo not in _CAMPOS_SIN_SEPARADOR and valor:
-                valor = valor + "\n\u00a0"
             replacements[f"{{{{ph_{campo}}}}}"] = valor
 
     # Detectar párrafos que originalmente son placeholders de módulos.
@@ -730,7 +735,7 @@ def generar_slide_producto(
     # Espaciado visual entre módulos solo en párrafos de módulos detectados.
     # No aplica para akurtech.
     if module_paragraph_ids:
-        space_after = Pt(0) if base_type == "akurtech" else Pt(16)
+        space_after = Pt(0) if base_type == "akurtech" else Pt(11)
         for shape in slide.shapes:
             if not shape.has_text_frame:
                 continue
