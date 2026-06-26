@@ -586,7 +586,7 @@ def generar_contenido_slide(slide_item, data, logo_stream):
 
 
 def generar_slide_producto(
-    resumen, product_type, data, logo_stream, pie_l="", pie_r=""
+    resumen, product_type, slide_content, data, logo_stream, pie_l="", pie_r=""
 ):
     # Normalizar product_type para selección de plantilla y campos
     # Ejemplo: invgate.asj -> invgate
@@ -618,10 +618,26 @@ def generar_slide_producto(
         "{{ph_resume}}": resumen, # Compatibilidad con plantillas en inglés/mixtas
         "{{ph_pie_l}}": data.get("pie_l", ""),
         "{{ph_pie_r}}": data.get("pie_r", ""),
-        "{{ph_sugerencia_version}}": data.get("sugerencia_version", ""),
+        "{{ph_sugerencia_version}}": slide_content.get("sugerencia_version", ""),
         # Compatibilidad: algunas plantillas pueden tener el token sin {{}}
-        "sugerencia_version": data.get("sugerencia_version", ""),
+        "sugerencia_version": slide_content.get("sugerencia_version", ""),
     }
+
+    # Si la plantilla de producto no tiene un placeholder específico para
+    # sugerencia_version, anexamos el texto al resumen/resume para que aparezca
+    # debajo del resumen en el mismo bloque.
+    sugerencia_version_text = str(slide_content.get("sugerencia_version", "") or "").strip()
+    if sugerencia_version_text:
+        template_text = "\n".join(
+            shape.text for shape in slide.shapes if shape.has_text_frame
+        )
+        if "{{ph_sugerencia_version}}" not in template_text and "sugerencia_version" not in template_text:
+            for resume_key in ("{{ph_resumen}}", "{{ph_resume}}"):
+                resume_value = str(replacements.get(resume_key, "") or "").strip()
+                if resume_value and sugerencia_version_text not in resume_value:
+                    replacements[resume_key] = f"{resume_value}\n\n{sugerencia_version_text}"
+                elif not resume_value:
+                    replacements[resume_key] = sugerencia_version_text
 
     # Agregar "VERSION:" como línea antes del resumen en el placeholder
     # Buscar versión en distintas claves posibles del data dict

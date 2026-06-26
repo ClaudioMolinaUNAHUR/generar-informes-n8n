@@ -106,8 +106,9 @@ async def generate_report(request: Request):
 
     for slide_item in slides_data:
         product_type = slide_item["type"]
-        resumen = slide_item.get("slide", {}).get("resumen", "")
-        producto_slide = generar_slide_producto(resumen, product_type, data, logo_stream)
+        slide_content = slide_item.get("slide", {})
+        resumen = slide_content.get("resumen", "")
+        producto_slide = generar_slide_producto(resumen, product_type, slide_content, data, logo_stream)
         generated_pptx.append(producto_slide)
         content_pptx = generar_contenido_slide(slide_item, data, logo_stream)
         generated_pptx.append(content_pptx)
