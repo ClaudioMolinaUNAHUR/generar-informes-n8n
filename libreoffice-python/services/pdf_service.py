@@ -393,6 +393,8 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     # Seleccionar plantilla
     if is_invgate_asj and has_work_data:
         template_file = "plantilla_contenido_work.pptx"
+    elif product_type.lower() == "sonarqube" and num_charts == 2:
+        template_file = "plantilla_contenido_sonarqube.pptx"
     elif num_charts == 1:
         template_file = "plantilla_contenido_1.pptx"
     elif num_charts == 2:
@@ -720,6 +722,9 @@ def generar_slide_producto(
 
         if base_type == "sonarqube" and "pie" not in key_l and "logo" not in key_l:
             apply_text_formatting(tf, font_name="Aptos", size=11.5, set_line=False)
+            if "resumen" not in key_l and "resume" not in key_l and "sugerencia_version" not in key_l:
+                for p in tf.paragraphs:
+                    p.line_spacing = 1.5
             continue
 
         if "titulo" in key_l:
