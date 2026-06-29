@@ -264,6 +264,7 @@ def main():
             "invgate": "plantilla_contenido.pptx",
             "beyondtrust": "plantilla_contenido.pptx",
             "whalemate": "plantilla_contenido.pptx",
+            "sonarqube": "plantilla_contenido.pptx",
         }
         if slide_data:
             main["slides"].append(

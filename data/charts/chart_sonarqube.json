@@ -2,11 +2,20 @@
   "vulnerabilidades": {
     "Seguridad": "Seguridad",
     "Security Review": "Security review"
-    }
   },
 
   "soporte": {
     "Consultas Respondidas": "Consultas Respondidas",
     "Monitoreos Realizados": "Monitoreos Realizados",
     "Capacitaciones/ Asistencias": "Capacitaciones/ Asistencias"
+  },
+
+  "ranking": {
+    "_row_regex": "^Rating\\s*",
+    "_label_prefix": "Rating ",
+    "_max_points": 5,
+    "_show_kpi": false,
+    "security_review": "Security review",
+    "seguridad": "Seguridad"
   }
+}

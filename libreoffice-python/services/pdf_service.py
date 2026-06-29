@@ -718,6 +718,10 @@ def generar_slide_producto(
         key_l = key.lower()
         campo = key_l.replace("{{ph_", "").replace("}}", "")
 
+        if base_type == "sonarqube" and "pie" not in key_l and "logo" not in key_l:
+            apply_text_formatting(tf, font_name="Aptos", size=11.5, set_line=False)
+            continue
+
         if "titulo" in key_l:
             apply_text_formatting(tf, font_name="Aptos", size=18)
         elif "sub" in key_l:

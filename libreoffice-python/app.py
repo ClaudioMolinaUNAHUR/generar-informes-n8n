@@ -274,6 +274,7 @@ async def build_structure(request: Request):
                 "beyondtrust": "plantilla_contenido.pptx",
                 "whalemate": "plantilla_contenido.pptx",
                 "axur": "plantilla_contenido.pptx",
+                "sonarqube": "plantilla_contenido.pptx",
             }
             if slide_data:
                 main["slides"].append(
