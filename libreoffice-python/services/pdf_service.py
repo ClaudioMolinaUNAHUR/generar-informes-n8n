@@ -26,6 +26,12 @@ def _prepare_output_file(path):
         os.remove(path)
 
 
+def _get_suggestion_value(slide_content, index):
+    singular_key = f"sugerencia_{index}"
+    plural_key = f"sugerencias_{index}"
+    return slide_content.get(singular_key, slide_content.get(plural_key, ""))
+
+
 
 
 def replace_placeholders(slide, replacements):
@@ -114,6 +120,21 @@ def replace_placeholders(slide, replacements):
             # Limpiar runs del nuevo párrafo clonado
             for r in new_p.findall(qn("a:r")):
                 new_p.remove(r)
+            
+            # Reducir espacios en párrafos clonados para evitar separación excesiva
+            pPr = new_p.find(qn("a:pPr"))
+            if pPr is not None:
+                # Buscar y remover espacios antes/después
+                spcBef = pPr.find(qn("a:spcBef"))
+                if spcBef is not None:
+                    pPr.remove(spcBef)
+                spcAft = pPr.find(qn("a:spcAft"))
+                if spcAft is not None:
+                    pPr.remove(spcAft)
+                # Crear nuevos espacios minimales
+                spcAft_new = etree.SubElement(pPr, qn("a:spcAft"))
+                spcAft_new.set("val", "0")
+            
             _write_line_to_p(new_p, line)
             insert_after.addnext(new_p)
             insert_after = new_p
@@ -159,6 +180,21 @@ def replace_placeholders(slide, replacements):
                     new_p = copy.deepcopy(first_para._p)
                     for r in new_p.findall(qn("a:r")):
                         new_p.remove(r)
+                    
+                    # Reducir espacios en párrafos clonados para evitar separación excesiva
+                    pPr = new_p.find(qn("a:pPr"))
+                    if pPr is not None:
+                        # Buscar y remover espacios antes/después
+                        spcBef = pPr.find(qn("a:spcBef"))
+                        if spcBef is not None:
+                            pPr.remove(spcBef)
+                        spcAft = pPr.find(qn("a:spcAft"))
+                        if spcAft is not None:
+                            pPr.remove(spcAft)
+                        # Crear nuevo espacio minimal
+                        spcAft_new = etree.SubElement(pPr, qn("a:spcAft"))
+                        spcAft_new.set("val", "0")
+                    
                     r_el = etree.SubElement(new_p, qn("a:r"))
                     rPr = etree.SubElement(r_el, qn("a:rPr"), attrib={"lang": "es-AR", "dirty": "0"})
                     if item.get("bold", False):
@@ -210,7 +246,9 @@ def replace_placeholders(slide, replacements):
         paras_to_remove = []
         for para in tf.paragraphs:
             para_text = _rebuild_para_text(para).strip()
-            if not para_text:
+            # No eliminar párrafos con espacio no-rompible (separadores intencionales)
+            raw_text = _rebuild_para_text(para)
+            if not para_text and "\u00a0" not in raw_text:
                 paras_to_remove.append(para._p)
         for p_elem in paras_to_remove:
             log(f"DEBUG: replace_placeholders - Limpiando párrafo vacío en shape '{shape.name}'")
@@ -332,6 +370,31 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     if num_charts == 0:
         # No crear la hoja si no hay gráficos
         return None
+    
+    # Obtener product_type al inicio para verificar work_t/work_n
+    product_type = slide_item.get("type")
+    
+    # Verificar si hay work_t o work_n para invgate.asj
+    is_invgate_asj = product_type.lower() == "invgate.asj"
+    has_work_data = False
+    if is_invgate_asj:
+        work_n = str(
+            slide_content.get(
+                "work_n",
+                slide_content.get("{{ph_work_n}}", slide_content.get("workstation", "")),
+            )
+            or ""
+        )
+        work_t = str(
+            slide_content.get("work_t", slide_content.get("{{ph_work_t}}", "")) or ""
+        )
+        has_work_data = bool(work_t or work_n)
+    
+    # Seleccionar plantilla
+    if is_invgate_asj and has_work_data:
+        template_file = "plantilla_contenido_work.pptx"
+    elif product_type.lower() == "sonarqube" and num_charts == 2:
+        template_file = "plantilla_contenido_sonarqube.pptx"
     elif num_charts == 1:
         template_file = "plantilla_contenido_1.pptx"
     elif num_charts == 2:
@@ -341,7 +404,7 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     else:
         # Si hay más de 4, usar la plantilla de 4 gráficos
         template_file = "plantilla_contenido_4.pptx"
-    print(f"Generando slide de contenido para {slide_item.get('type')} con {num_charts} gráficos usando plantilla {template_file}")
+    print(f"Generando slide de contenido para {product_type} con {num_charts} gráficos usando plantilla {template_file}")
 
     prs = Presentation(f"{DATA_DIR}/plantillas/{template_file}")
 
@@ -349,7 +412,6 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     slide = prs.slides[0]
 
     # Cargamos los nombres amigables para las leyendas de los gráficos
-    product_type = slide_item.get("type")
     friendly_names = {}
     try:
         with open(
@@ -369,33 +431,62 @@ def generar_contenido_slide(slide_item, data, logo_stream):
 
     # Diccionario de reemplazos
     desc_val = str(slide_content.get("desc", "") or "")
+    is_invgate = product_type.lower() in {"invgate", "invgate.asj"}
+    if is_invgate:
+        # Solo recalcular si no fue hecho en la selección de plantilla
+        if not is_invgate_asj:
+            work_n = str(
+                slide_content.get(
+                    "work_n",
+                    slide_content.get("{{ph_work_n}}", slide_content.get("workstation", "")),
+                )
+                or ""
+            )
+            work_t = str(
+                slide_content.get("work_t", slide_content.get("{{ph_work_t}}", "")) or ""
+            ).upper()
+        else:
+            # Ya fueron calculados, solo aplicar upper() a work_t
+            work_t = work_t.upper()
+    else:
+        work_t = ""
+        work_n = ""
     replacements = {
         "{{ph_titulo}}": slide_content.get("titulo", ""),
         "{{ph_periodo}}": periodo,
-        "{{ph_title_1}}": slide_content.get("title_1", ""),
+        "{{ph_title_1}}": str(slide_content.get("title_1", "") or "").upper(),
         "{{ph_kpis_1}}": normalize_kpi_text(slide_content.get("kpis_1", ""), 250),
-        "{{ph_title_2}}": slide_content.get("title_2", ""),
+        "{{ph_title_2}}": str(slide_content.get("title_2", "") or "").upper(),
         "{{ph_kpis_2}}": normalize_kpi_text(slide_content.get("kpis_2", ""), 250),
-        "{{ph_title_3}}": slide_content.get("title_3", ""),
+        "{{ph_title_3}}": str(slide_content.get("title_3", "") or "").upper(),
         "{{ph_kpis_3}}": normalize_kpi_text(slide_content.get("kpis_3", ""), 250),
-        "{{ph_title_4}}": slide_content.get("title_4", ""),
+        "{{ph_title_4}}": str(slide_content.get("title_4", "") or "").upper(),
         "{{ph_kpis_4}}": normalize_kpi_text(slide_content.get("kpis_4", ""), 250),
         "{{ph_pie_l}}": feet_l,
         "{{ph_pie_r}}": feet_r,
         # Asegura que desc nunca sea None
         "{{ph_desc}}": desc_val,
+        "{{ph_work_t}}": work_t,
+        "{{ph_work_n}}": work_n,
         # Sugerencias (opcionales, vacío si no vienen)
         "{{ph_sugerencia_1}}": normalize_suggestion_text(
-            slide_content.get("sugerencia_1", ""), 200
+            _get_suggestion_value(slide_content, 1), 200
         ),
         "{{ph_sugerencia_2}}": normalize_suggestion_text(
-            slide_content.get("sugerencia_2", ""), 200
+            _get_suggestion_value(slide_content, 2), 200
         ),
         "{{ph_sugerencia_3}}": normalize_suggestion_text(
-            slide_content.get("sugerencia_3", ""), 200
+            _get_suggestion_value(slide_content, 3), 200
         ),
         "{{ph_sugerencia_4}}": normalize_suggestion_text(
-            slide_content.get("sugerencia_4", ""), 200
+            _get_suggestion_value(slide_content, 4), 200
+        ),
+        "{{ph_sugerencia_version}}": normalize_suggestion_text(
+            slide_content.get("sugerencia_version", ""), 200
+        ),
+        # Compatibilidad: algunas plantillas pueden tener el token sin {{}}
+        "sugerencia_version": normalize_suggestion_text(
+            slide_content.get("sugerencia_version", ""), 200
         ),
     }
     print(f"Reemplazos para slide de contenido ({product_type}): {replacements}")
@@ -419,14 +510,25 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     for tf, key in modified:
         key_l = key.lower()
         flags = tf_flags.setdefault(
-            id(tf), {"tf": tf, "titulo": False, "kpis": False, "sugerencia": False}
+            id(tf), {
+                "tf": tf,
+                "titulo": False,
+                "title": False,
+                "kpis": False,
+                "sugerencia": False,
+                "work": False,
+            }
         )
         if "titulo" in key_l:
             flags["titulo"] = True
+        if "title_" in key_l:
+            flags["title"] = True
         if "kpis" in key_l:
             flags["kpis"] = True
         if "sugerencia" in key_l:
             flags["sugerencia"] = True
+        if "work_t" in key_l or "work_n" in key_l:
+            flags["work"] = True
 
     for flags in tf_flags.values():
         tf = flags["tf"]
@@ -434,7 +536,18 @@ def generar_contenido_slide(slide_item, data, logo_stream):
             apply_text_formatting(tf, font_name="Aptos", size=28)
             continue
 
-        if flags["sugerencia"] or flags["kpis"] or "title" in key_l:
+        if flags["title"] and not (flags["kpis"] or flags["sugerencia"]):
+            apply_text_formatting(tf, font_name="Aptos", size=10, set_line=False)
+            for p in tf.paragraphs:
+                p.alignment = PP_ALIGN.LEFT
+                p.space_before = Pt(0)
+                p.space_after = Pt(0)
+                p.line_spacing = 1.15
+                for run in p.runs:
+                    run.font.bold = True
+            continue
+
+        if flags["sugerencia"] or flags["kpis"] or flags["work"]:
             apply_text_formatting(tf, font_name="Aptos", size=10, set_line=False)
             for p in tf.paragraphs:
                 p.alignment = PP_ALIGN.LEFT
@@ -446,6 +559,12 @@ def generar_contenido_slide(slide_item, data, logo_stream):
                 if p.text.strip().upper() == "SUGERENCIAS:":
                     for run in p.runs:
                         run.font.italic = True
+                
+                # Aplicar negrita y subrayado a work_t y work_n
+                if flags["work"]:
+                    for run in p.runs:
+                        run.font.bold = True
+                        run.font.underline = True
             continue
 
         # Cambia el tamaño de fuente solo para axur y plantilla_axur.pptx
@@ -469,7 +588,7 @@ def generar_contenido_slide(slide_item, data, logo_stream):
 
 
 def generar_slide_producto(
-    resumen, product_type, data, logo_stream, pie_l="", pie_r=""
+    resumen, product_type, slide_content, data, logo_stream, pie_l="", pie_r=""
 ):
     # Normalizar product_type para selección de plantilla y campos
     # Ejemplo: invgate.asj -> invgate
@@ -483,13 +602,14 @@ def generar_slide_producto(
     # Definir campos por tipo de producto
     campos_por_tipo = {
         "uas": ["usu_per", "usu_esp", "solicitudes", "revalida"],
-        "beyondtrust": ["pra", "rs", "ps", "adb", "epm"],
+        "beyondtrust": ["pra", "rs", "pws", "adb", "epm"],
         "whalemate": ["sim", "aca", "ana", "grh", "cad"],
         "wazuh": ["ddv", "snc", "enc", "ecn", "iav"], # Incluir ambos por compatibilidad
         "invgate": ["isd", "iam"],
         "invgate.asj": ["isd", "iam"],
         "axur": ["pdm", "th", "cti", "fdd", "ddw", "tkd"],
         "akurtech": ["tra", "pgs", "lgn", "rfg", "alr", "bwl", "rdc", "rdt", "rdp", "rdl"],
+        "sonarqube": ["sca", "pdc", "shv", "cyd", "icc"],
     }
 
     # Mapear product_type a grupo
@@ -500,7 +620,26 @@ def generar_slide_producto(
         "{{ph_resume}}": resumen, # Compatibilidad con plantillas en inglés/mixtas
         "{{ph_pie_l}}": data.get("pie_l", ""),
         "{{ph_pie_r}}": data.get("pie_r", ""),
+        "{{ph_sugerencia_version}}": slide_content.get("sugerencia_version", ""),
+        # Compatibilidad: algunas plantillas pueden tener el token sin {{}}
+        "sugerencia_version": slide_content.get("sugerencia_version", ""),
     }
+
+    # Si la plantilla de producto no tiene un placeholder específico para
+    # sugerencia_version, anexamos el texto al resumen/resume para que aparezca
+    # debajo del resumen en el mismo bloque.
+    sugerencia_version_text = str(slide_content.get("sugerencia_version", "") or "").strip()
+    if sugerencia_version_text:
+        template_text = "\n".join(
+            shape.text for shape in slide.shapes if shape.has_text_frame
+        )
+        if "{{ph_sugerencia_version}}" not in template_text and "sugerencia_version" not in template_text:
+            for resume_key in ("{{ph_resumen}}", "{{ph_resume}}"):
+                resume_value = str(replacements.get(resume_key, "") or "").strip()
+                if resume_value and sugerencia_version_text not in resume_value:
+                    replacements[resume_key] = f"{resume_value}\n\n{sugerencia_version_text}"
+                elif not resume_value:
+                    replacements[resume_key] = sugerencia_version_text
 
     # Agregar "VERSION:" como línea antes del resumen en el placeholder
     # Buscar versión en distintas claves posibles del data dict
@@ -527,10 +666,29 @@ def generar_slide_producto(
         replacements["{{ph_resumen}}"] = res_text
         replacements["{{ph_resume}}"] = res_text
 
-    # Agregar los campos nuevos si corresponden
+    # Agregar los campos de módulo. El espaciado visual entre bloques se
+    # aplica más abajo vía space_after sobre el propio párrafo del módulo
+    # (ver "module_paragraph_ids"), sin agregar párrafos en blanco extra.
     if tipo_grupo:
         for campo in campos_por_tipo[tipo_grupo]:
-            replacements[f"{{{{ph_{campo}}}}}"] = data.get(campo, "")
+            valor = data.get(campo, "")
+            replacements[f"{{{{ph_{campo}}}}}"] = valor
+
+    # Detectar párrafos que originalmente son placeholders de módulos.
+    # Luego del reemplazo, solo esos párrafos recibirán espaciado extra.
+    module_placeholder_keys = (
+        {f"{{{{ph_{campo}}}}}" for campo in campos_por_tipo.get(tipo_grupo, [])}
+        if tipo_grupo
+        else set()
+    )
+    module_paragraph_ids = set()
+    if module_placeholder_keys:
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            for p in shape.text_frame.paragraphs:
+                if (p.text or "").strip() in module_placeholder_keys:
+                    module_paragraph_ids.add(id(p._p))
 
     # Quitar negritas heredadas del template ANTES de reemplazar,
     # para no pisar la negrita que _set_para_with_bold_labels va a aplicar.
@@ -553,15 +711,21 @@ def generar_slide_producto(
     # apply_text_formatting NO debe tocar bold en estos campos.
     CAMPOS_CON_NEGRITA = {
         "usu_per", "usu_esp", "solicitudes", "revalida",
-        "pra", "rs", "ps", "adb", "epm",
+        "pra", "rs", "pws", "adb", "epm",
         "sim", "aca", "ana", "grh", "cad",
         "ddv", "snc", "enc", "iav",
         "isd", "iam", "resumen",
     }
-
     for tf, key in modified:
         key_l = key.lower()
         campo = key_l.replace("{{ph_", "").replace("}}", "")
+
+        if base_type == "sonarqube" and "pie" not in key_l and "logo" not in key_l:
+            apply_text_formatting(tf, font_name="Aptos", size=11.5, set_line=False)
+            if "resumen" not in key_l and "resume" not in key_l and "sugerencia_version" not in key_l:
+                for p in tf.paragraphs:
+                    p.line_spacing = 1.5
+            continue
 
         if "titulo" in key_l:
             apply_text_formatting(tf, font_name="Aptos", size=18)
@@ -592,6 +756,17 @@ def generar_slide_producto(
             # Para axur y akurtech se usa tamaño 11 en lugar de 12.
             campo_font_size = 11 if base_type in ("axur", "akurtech") else 12
             apply_text_formatting(tf, font_name="Aptos", size=campo_font_size)
+
+    # Espaciado visual entre módulos solo en párrafos de módulos detectados.
+    # No aplica para akurtech.
+    if module_paragraph_ids:
+        space_after = Pt(0) if base_type == "akurtech" else Pt(11)
+        for shape in slide.shapes:
+            if not shape.has_text_frame:
+                continue
+            for p in shape.text_frame.paragraphs:
+                if id(p._p) in module_paragraph_ids:
+                    p.space_after = space_after
 
     output = f"{DATA_DIR}/pptx-parts/producto_{product_type}.pptx"
     _prepare_output_file(output)

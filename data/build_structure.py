@@ -6,7 +6,15 @@ from datetime import datetime, timedelta
 import locale
 
 DATA_DIR = "/data"
-slide_info = ["resumen", "sugerencia_1", "sugerencia_2", "sugerencia_3 "]
+slide_info = [
+    "resumen",
+    "sugerencia_1",
+    "sugerencia_2",
+    "sugerencia_3",
+    "desc",
+    "work_t",
+    "work_n",
+]
 
 
 MESES_ES = {
@@ -36,21 +44,48 @@ def ultimo_dia_mes(dt: datetime) -> datetime:
     return siguiente_mes - timedelta(days=1)
 
 
-def chart(values, name, build, kpis):
+def _series_label(field_def, fallback):
+    if isinstance(field_def, dict):
+        return str(field_def.get("label") or field_def.get("title") or fallback)
+    return fallback
+
+
+def _series_field_name(field_def):
+    if isinstance(field_def, dict):
+        return field_def.get("field") or field_def.get("fields") or field_def.get("label")
+    return field_def
+
+
+def _show_series_in_chart(field_def):
+    if isinstance(field_def, dict):
+        return field_def.get("chart", True)
+    return True
+
+
+def chart(values, name, build, kpis, series_defs):
     total = 0
     for v in values:
-        count = sum(values[v])
+        series_values = values[v]
+        if v == "bt_credenciales":
+            count = series_values[-1] if series_values else 0
+        else:
+            count = sum(series_values)
         total += count
         if count > 0:
             kpis[v] = count
     chart_name = {"name": name, "used": False}
     if total > 0:
         chart_name["used"] = True
+        visible_values = {
+            serie_name: serie_values
+            for serie_name, serie_values in values.items()
+            if _show_series_in_chart(series_defs.get(serie_name))
+        }
 
         build["charts"][name] = {
             "type": "bar",
             "labels": ["Semana 1", "Semana 2", "Semana 3", "Semana 4"],
-            **values,
+            **visible_values,
         }
     return chart_name
 
@@ -64,7 +99,10 @@ def build_slide(product, product_name, chart_definitions, pointer_resume, resume
         "sugerencia_1": "",
         "sugerencia_2": "",
         "sugerencia_3": "",
+        "work_t": "",
+        "work_n": "",
         "charts": {},
+        "desc": resume,
     }
     # 2. Inicializamos dinámicamente los contenedores para los datos de los gráficos.
     chart_data = {
@@ -73,7 +111,7 @@ def build_slide(product, product_name, chart_definitions, pointer_resume, resume
     }
     # También creamos un mapa plano de todas las series para facilitar la búsqueda.
     all_series = {
-        serie: json_key
+        serie: _series_label(json_key, _series_field_name(json_key))
         for series in chart_definitions.values()
         for serie, json_key in series.items()
     }
@@ -85,12 +123,10 @@ def build_slide(product, product_name, chart_definitions, pointer_resume, resume
         if semana_key in slide_info:
             valor = semana.get(pointer_resume, "")
             build[semana_key] += valor if valor != "null" else ""
-        else:
-            if semana_key == "sugerencia_3":
-                break
+        elif semana_key.startswith("Semana"):
             for chart_name, series_def in chart_definitions.items():
                 for serie_name, json_key in series_def.items():
-                    val = semana.get(json_key, 0)
+                    val = semana.get(_series_field_name(json_key), 0)
                     try:
                         val = int(float(val))
                     except (ValueError, TypeError):
@@ -100,7 +136,7 @@ def build_slide(product, product_name, chart_definitions, pointer_resume, resume
     # 4. Generamos los gráficos y los KPIs a partir de los datos recolectados.
     chart_names_used = []
     for chart_name, data in chart_data.items():
-        name = chart(data, chart_name, build, kpis)
+        name = chart(data, chart_name, build, kpis, chart_definitions.get(chart_name, {}))
         if name:
             chart_names_used.append(name)
 
@@ -228,6 +264,7 @@ def main():
             "invgate": "plantilla_contenido.pptx",
             "beyondtrust": "plantilla_contenido.pptx",
             "whalemate": "plantilla_contenido.pptx",
+            "sonarqube": "plantilla_contenido.pptx",
         }
         if slide_data:
             main["slides"].append(
@@ -241,7 +278,7 @@ def main():
     # with open("salida.json", "w", encoding="utf-8") as f:
     #     json.dump({"data": main}, f, indent=2, ensure_ascii=False)
 
-    print(json.dumps({"status": "ok", "output_file": data["main"]}, ensure_ascii=False))
+    print(json.dumps({"status": "ok", "output_file": main}, ensure_ascii=False))
 
 
 if __name__ == "__main__":

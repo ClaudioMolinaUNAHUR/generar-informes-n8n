@@ -2,7 +2,12 @@
   "incidentes_tipos_de_amenazas": {
     "Phishing": "Phishing",
     "Perfil falso en red social": "Perfil falso en red social",
-    "Uso fraudulento de marca": "Uso fraudulento de marca"
+    "Uso fraudulento de marca": "Uso fraudulento de marca",
+    "Amenazas totales": {
+      "field": "Amenazas totales",
+      "label": "Amenazas totales",
+      "chart": false
+    }
   },
   "takedown_estado_resolucion": {
     "Resuelto": "Resuelto",

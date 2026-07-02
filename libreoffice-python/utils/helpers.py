@@ -2,7 +2,7 @@ import os
 import base64
 from io import BytesIO
 import textwrap
-from PIL import Image
+from PIL import Image, ImageChops
 from pptx.util import Inches, Pt
 import warnings
 
@@ -124,21 +124,100 @@ def set_placeholder_text(slide, idx, text):
     apply_text_formatting(tf, font_name="Aptos", size=11)
 
 
+def _trim_transparent_borders(img: Image.Image) -> Image.Image:
+    """
+    Recorta bordes completamente transparentes para evitar diferencias
+    visuales por padding interno en los logos.
+    """
+    if img.mode != "RGBA":
+        img = img.convert("RGBA")
+
+    alpha = img.getchannel("A")
+    bbox = alpha.getbbox()
+    if bbox:
+        img = img.crop(bbox)
+
+    # Algunas fuentes traen fondo opaco uniforme (sin transparencia).
+    # Recortamos tambien ese margen usando el color promedio de las esquinas.
+    rgb = img.convert("RGB")
+    width, height = rgb.size
+    if width < 3 or height < 3:
+        return img
+
+    corners = [
+        rgb.getpixel((0, 0)),
+        rgb.getpixel((width - 1, 0)),
+        rgb.getpixel((0, height - 1)),
+        rgb.getpixel((width - 1, height - 1)),
+    ]
+    bg_color = tuple(sum(px[i] for px in corners) // len(corners) for i in range(3))
+
+    bg = Image.new("RGB", rgb.size, bg_color)
+    diff = ImageChops.difference(rgb, bg).convert("L")
+    tolerance = 18
+    mask = diff.point(lambda p: 255 if p > tolerance else 0)
+    content_bbox = mask.getbbox()
+    if not content_bbox:
+        return img
+
+    left, top, right, bottom = content_bbox
+    margin = 2
+    left = max(0, left - margin)
+    top = max(0, top - margin)
+    right = min(width, right + margin)
+    bottom = min(height, bottom + margin)
+    return img.crop((left, top, right, bottom))
+
+
 def create_composite_logo_from_base64_list(
-    logos_base64_list: list[str], target_height: int = 120
+    logos_base64_list: list[str], target_height: int = 120, max_logo_width: int = 720, spacing: int = 12
 ) -> BytesIO | None:
     if not logos_base64_list:
         return None
 
+    def _parse_logo_item(item):
+        # Compatibilidad: lista de strings base64 o lista de objetos con nombre + base64.
+        if isinstance(item, dict):
+            filename = (
+                item.get("filename")
+                or item.get("file_name")
+                or item.get("name")
+                or item.get("logo_name")
+                or ""
+            )
+            b64 = (
+                item.get("base64")
+                or item.get("logo_base64")
+                or item.get("data")
+                or ""
+            )
+            return str(filename), str(b64)
+        return "", str(item or "")
+
     images = []
-    for b64_string in logos_base64_list:
+    for item in logos_base64_list:
+        logo_name, b64_string = _parse_logo_item(item)
         img_stream = get_logo_from_base64(b64_string)
         if img_stream:
             try:
                 img = Image.open(img_stream).convert("RGBA")
-                ratio = target_height / img.height
+                img = _trim_transparent_borders(img)
+
+                # Ajuste puntual: BSJ suele verse más chico por composición del isotipo.
+                # Si viene identificado como BSJ.png, se incrementa levemente su altura objetivo.
+                is_bsj = "bsj" in logo_name.lower() and logo_name.lower().endswith(".png")
+                logo_target_height = int(target_height * 1.18) if is_bsj else target_height
+
+                ratio = logo_target_height / img.height
                 new_width = int(img.width * ratio)
-                img = img.resize((new_width, target_height), Image.LANCZOS)
+                img = img.resize((new_width, logo_target_height), Image.LANCZOS)
+
+                # Evita que un logo extremadamente ancho reduzca el tamaño visual del resto.
+                if img.width > max_logo_width:
+                    ratio = max_logo_width / img.width
+                    resized_h = max(1, int(img.height * ratio))
+                    img = img.resize((max_logo_width, resized_h), Image.LANCZOS)
+
                 images.append(img)
             except Exception as e:
                 log(f"⚠️ Error opening image from stream: {e}")
@@ -147,14 +226,14 @@ def create_composite_logo_from_base64_list(
         return None
 
     max_width = max(img.width for img in images)
-    total_height = sum(img.height for img in images)
+    total_height = sum(img.height for img in images) + spacing * (len(images) - 1)
     composite_image = Image.new("RGBA", (max_width, total_height), (0, 0, 0, 0))
 
     y_offset = 0
     for img in images:
         x_offset = (max_width - img.width) // 2
         composite_image.paste(img, (x_offset, y_offset), img)
-        y_offset += img.height
+        y_offset += img.height + spacing
 
     output_stream = BytesIO()
     composite_image.save(output_stream, format="PNG")
@@ -164,8 +243,8 @@ def create_composite_logo_from_base64_list(
 
 def insert_image_scaled_by_width(slide, placeholder, image_path_or_stream):
     """
-    Reemplaza un placeholder con una imagen, escalándola para que ocupe todo el ancho
-    del placeholder y ajustando el alto proporcionalmente. La imagen se centra verticalmente.
+    Reemplaza un placeholder con una imagen, escalándola para que encaje dentro
+    del área del placeholder sin desbordar y manteniendo la relación de aspecto.
     """
     parent = placeholder.element.getparent()
     if parent is None:
@@ -179,19 +258,22 @@ def insert_image_scaled_by_width(slide, placeholder, image_path_or_stream):
     log(
         f"DEBUG: insert_image_scaled_by_width - placeholder '{placeholder.name}' dims=({ph_width},{ph_height}) pos=({ph_left},{ph_top})"
     )
-    pic = slide.shapes.add_picture(image_path_or_stream, ph_left, ph_top, width=ph_width)
+    pic = slide.shapes.add_picture(image_path_or_stream, ph_left, ph_top)
     log(
         f"DEBUG: insert_image_scaled_by_width - picture inserted dims=({pic.width},{pic.height}) pos=({pic.left},{pic.top})"
     )
 
-    # Ajustar la imagen para que encaje dentro del placeholder sin desbordar.
-    if pic.height > ph_height:
-        scale = ph_height / pic.height
-        pic.width = int(pic.width * scale)
-        pic.height = int(pic.height * scale)
-        log(
-            f"DEBUG: insert_image_scaled_by_width - picture redimensionada a dims=({pic.width},{pic.height}) para caber en el placeholder"
-        )
+    if ph_width > 0 and ph_height > 0:
+        width_scale = ph_width / pic.width
+        height_scale = ph_height / pic.height
+        scale = min(width_scale, height_scale)
+
+        if scale != 1:
+            pic.width = int(pic.width * scale)
+            pic.height = int(pic.height * scale)
+            log(
+                f"DEBUG: insert_image_scaled_by_width - picture redimensionada a dims=({pic.width},{pic.height}) para caber en el placeholder"
+            )
 
     pic.left = ph_left + max(0, (ph_width - pic.width) // 2)
     pic.top = ph_top + max(0, (ph_height - pic.height) // 2)

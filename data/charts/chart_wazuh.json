@@ -1,17 +1,43 @@
 {
-  "deteccion_vulnerabilidades": {
-    "wazuh_vuln_crit": "Vulnerabilidades Criticas",
-    "wazuh_vuln_alta": "Vulnerabilidades Altas",
-    "wazuh_vuln_media": "Vulnerabilidades Medias",
-    "wazuh_vuln_baja": "Vulnerabilidades Bajas",
-    "wazuh_vuln_totales": "Vulnerabilidades Totales"
+  "detección_vulnerabilidades": {
+    "wazuh_vuln_crit": {
+      "field": "Vulnerabilidades Criticas",
+      "label": "Vulnerabilidades Criticas",
+      "chart": true
+    },
+    "wazuh_vuln_alta": {
+      "field": "Vulnerabilidades Altas",
+      "label": "Vulnerabilidades Altas",
+      "chart": true
+    },
+    "wazuh_vuln_media": {
+      "field": "Vulnerabilidades Medias",
+      "label": "Vulnerabilidades Medias",
+      "chart": true
+    },
+    "wazuh_vuln_baja": {
+      "field": "Vulnerabilidades Bajas",
+      "label": "Vulnerabilidades Bajas",
+      "chart": true
+    },
+    "wazuh_vuln_totales": {
+      "field": "Vulnerabilidades Totales",
+      "label": "Vulnerabilidades Totales",
+      "chart": true
+    }
   },
   "alertas_controles": {
-    "wazuh_bloqueo_usuarios": "Bloqueo de usuarios",
-    "wazuh_cambios_firewall": "Login VPN",
-    "wazuh_admin_cuentas_windows": "Login Fallidos"
+    "wazuh_bloqueo_usuarios": "Bloqueo de usuario",
+    "wazuh_floodeo_agentes": "Floodeo agentes Wazuh",
+    "wazuh_creacion_tareas_programadas": "Creación de tareas programadas",
+    "wazuh_admin_cuentas_windows": "Administracion de cuentas Windows",
+    "wazuh_cambios_firewall": "Cambios en el firewall",
+    "wazuh_logon_fallidos": "Logon fallidos",
+    "wazuh_vpn_failed_logons": "VPN Failed Logons",
+    "wazuh_login_vpn": "Login VPN",
+    "wazuh_login_fallidos": "Login Fallidos"
   },
-    "soporte": {
+  "soporte": {
     "wazuh_vuln_resuelt": "Vulnerabilidades Resueltas",
     "wazuh_soporte": "Soporte",
     "wazuh_solicitudes": "Solicitudes (configuración, integraciones, fuentes)",

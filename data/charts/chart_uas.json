@@ -6,8 +6,21 @@
     "uas_recupero_pass": "Recupero especiales"
   },
   "mobile": {
-    "uas_mobile_cambio_pass": "Mobile -Cambio de contraseñs",
-    "uas_mobile_desbloqueo": "Mobile - Desbloqueo"
+    "uas_mobile_cambio_pass": {
+      "fields": [
+        "Mobile - Cambio de contraseña",
+        "Mobile -Cambio de contraseña",
+        "Mobile - Cambio de contraseñas"
+      ],
+      "label": "Mobile - Cambio de contraseña"
+    },
+    "uas_mobile_desbloqueo": {
+      "fields": [
+        "Mobile - Desbloqueo",
+        "Mobile -Desbloqueo"
+      ],
+      "label": "Mobile - Desbloqueo"
+    }
   },
   "usuarios_personales": {
     "uas_autogestion": "Autogestión",

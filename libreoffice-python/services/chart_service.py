@@ -6,37 +6,84 @@ import numpy as np
 import textwrap
 from utils.helpers import insert_image_scaled_by_width, log
 
-def create_matplotlib_chart(chart_info, friendly_names, output_file):
-    plt.figure(figsize=(10, 5))
+EMU_PER_INCH = 914400
+
+def create_matplotlib_chart(chart_info, friendly_names, output_file, target_size=None):
+    if target_size is None:
+        target_size = (10, 5)
+
+    width, height = target_size
+    width = max(5, width)
+    height = max(3, height)
+    fig, ax = plt.subplots(figsize=(width, height), dpi=150)
     ctype = chart_info.get("type")
     chart_title = chart_info.get("title") or chart_info.get("titulo") or "<no title>"
+    use_adaptive_scale = False
+
+    def _normalized_chart_name(value):
+        return re.sub(r"\s+", " ", str(value or "").replace("_", " ").strip().lower())
+
+    def _compact_tick_label(value, _pos=None):
+        abs_value = abs(value)
+        if abs_value >= 1_000_000:
+            return f"{value / 1_000_000:.1f}M"
+        if abs_value >= 1_000:
+            return f"{value / 1_000:.0f}K"
+        return f"{int(value)}"
+
+    def _should_use_adaptive_scale(title, series_values):
+        # Antes esto solo se activaba para el gráfico "Alertas Controles".
+        # Lo generalizamos: cualquier gráfico de barras donde una serie sea
+        # mucho más chica que otra (p.ej. 9 vs 26777) sufre el mismo problema
+        # de barras "invisibles" en escala lineal, así que aplicamos la
+        # misma corrección sin importar el nombre del gráfico.
+        positives = [v for values in series_values for v in values if v and v > 0]
+        if len(positives) < 2:
+            return False
+        min_positive = min(positives)
+        max_positive = max(positives)
+        return min_positive > 0 and (max_positive / min_positive) >= 8
 
     # Título si viene en la definición del gráfico
     # title = chart_info.get("title") or chart_info.get("titulo") or ""
     # if title:
     #     plt.title(title, fontsize=20, fontweight="bold", pad=20)
 
-    # Aumentar tamaño de fuente para los ejes
-    plt.xticks(fontsize=18)
-    plt.yticks(fontsize=18)
+    # Usar tamaños de fuente fijos para evitar solapamientos variables
+    # Reducidos por defecto para mantener legibilidad y evitar solapamientos
+    DEFAULT_X_TICK_SIZE = 8
+    DEFAULT_Y_TICK_SIZE = 8
+    DEFAULT_LEGEND_SIZE = 8
+    DEFAULT_LABEL_SIZE = 11
+    tick_fontsize = DEFAULT_X_TICK_SIZE
+    legend_fontsize = DEFAULT_LEGEND_SIZE
+    label_fontsize = DEFAULT_LABEL_SIZE
 
     labels = chart_info.get("labels", [])
     x = range(len(labels))
 
     # Mapa de etiquetas amigables para claves comunes
+    def _friendly_label(key, value):
+        if isinstance(value, dict):
+            return value.get("label") or value.get("title") or key.replace("_", " ").capitalize()
+        return value
+
     flat_friendly_names = {
-        key: value for chart in friendly_names.values() for key, value in chart.items()
+        key: _friendly_label(key, value)
+        for chart in friendly_names.values()
+        for key, value in chart.items()
     }
 
     # Paleta de colores para series (se rotan si hay más series)
     palette = [
-        "#c0504d",  # azul
-        "#772c2a",  # verde
+        "#4F81BD",  # azul
+        "#9BBB59",  # verde
         "#8063a1",  # violeta
+        "#87C2D3",  # naranja
         "#f79546",  # gris oscuro
-        "#4f81bc",  # naranja
-        "#9bba58",  # rojo/  # azul fuerte
-        "#4aacc5",  # bordo fuerte
+        "#c43d3d",  # rojo/  # azul fuerte
+        "#e7cf47",
+        "#ee28b2",
     ]
 
     # Detectar series numéricas dinámicamente (manteniendo el orden del dict)
@@ -50,9 +97,27 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
         ):
             series_keys.append(key)
 
+    def _normalize_series_vals(values, labels_len):
+        vals = list(values or [])
+        if len(vals) > labels_len:
+            vals = vals[:labels_len]
+        if len(vals) < labels_len:
+            vals.extend([0] * (labels_len - len(vals)))
+        return vals
+
+    def _has_visible_data(values):
+        return any(v not in (None, 0) for v in values)
+
+    # Mostrar solo series que realmente tienen datos (evita leyenda con series vacías).
+    visible_series_keys = []
+    for key in series_keys:
+        vals = _normalize_series_vals(chart_info.get(key), len(labels))
+        if _has_visible_data(vals):
+            visible_series_keys.append(key)
+
     if ctype == "bar":
         # Barras agrupadas: calcular offsets según cantidad de series
-        n = len(series_keys)
+        n = len(visible_series_keys)
         if n == 0:
             # nada que dibujar
             return
@@ -60,81 +125,173 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file):
         ind = np.arange(len(labels))  # posiciones base
         total_width = 0.7
         bar_width = total_width / n
+        plotted_series = []
+        use_adaptive_scale = False
 
-        for idx, key in enumerate(series_keys):
+        for idx, key in enumerate(visible_series_keys):
             vals = list(chart_info.get(key) or [])
             if len(vals) > len(labels):
                 log(
                     f"DEBUG: create_matplotlib_chart - chart '{chart_title}' serie '{key}' tiene {len(vals)} valores pero labels {len(labels)}; truncando a labels"
                 )
-                vals = vals[: len(labels)]
-            if len(vals) < len(labels):
-                vals.extend([0] * (len(labels) - len(vals)))  # pad with 0
+            vals = _normalize_series_vals(vals, len(labels))
+            plotted_series.append(vals)
 
             label_full = flat_friendly_names.get(key, key.replace("_", " ").capitalize())
-            # Dividir etiquetas largas en varias líneas para que no encojan el gráfico
-            label = textwrap.fill(label_full, width=22)
+            label = textwrap.fill(label_full, width=20)
 
             color = palette[idx % len(palette)]
 
-            # calcular posiciones para esta serie
             offset = (idx - (n - 1) / 2) * bar_width
             positions = ind + offset
-            plt.bar(positions, vals, bar_width * 0.95, label=label, color=color)
+            ax.bar(positions, vals, bar_width * 0.95, label=label, color=color, edgecolor="none", zorder=3)
 
-        # Ajustar ticks al centro de los grupos
-        plt.xticks(ind, labels, rotation=0, fontsize=16)
-        plt.grid(axis="y", linestyle="-", color="#dcdcdc", linewidth=0.8)
-        # Leyenda a la derecha, centrada verticalmente
-        plt.legend(
+        # Estética general: sacar bordes superior/derecho y suavizar el resto
+        # para que el gráfico se vea más liviano (no afecta colores de series).
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("#d9d9d9")
+        ax.spines["bottom"].set_color("#d9d9d9")
+
+        use_adaptive_scale = _should_use_adaptive_scale(chart_title, plotted_series)
+        # Preparar etiquetas X: acortar o romper para evitar solapamientos
+        def _shorten_label(lbl):
+            m = re.match(r"^\s*Semana\s*(\d+)\s*$", str(lbl), flags=re.IGNORECASE)
+            if m:
+                # Mantener la palabra 'Semana' pero partir en dos líneas para evitar solapamiento
+                return f"Semana\n{m.group(1)}"
+            s = str(lbl)
+            if len(s) > 12 and " " in s:
+                # Insertar salto de línea en la primera separación para reducir ancho
+                parts = s.split(" ", 1)
+                return parts[0] + "\n" + parts[1]
+            if len(s) > 12:
+                return s[:10] + "..."
+            return s
+
+        display_labels = [_shorten_label(l) for l in labels]
+        x_tick_fontsize = tick_fontsize
+        if use_adaptive_scale:
+            x_tick_fontsize = max(8, tick_fontsize - 2)
+
+        ax.set_xticks(ind)
+        ax.set_xticklabels(display_labels, rotation=0, fontsize=x_tick_fontsize, ha="center")
+        ax.set_axisbelow(True)
+        ax.grid(axis="y", linestyle="-", color="#ececec", linewidth=0.8, zorder=0)
+        # Forzar tamaño de fuente constante para ticks e impedir solapamiento
+        ax.tick_params(axis="x", labelsize=tick_fontsize)
+        ax.tick_params(axis="y", labelsize=DEFAULT_Y_TICK_SIZE)
+        if use_adaptive_scale:
+            positive_values = [v for values in plotted_series for v in values if v and v > 0]
+            min_positive = min(positive_values)
+            max_positive = max(positive_values)
+            # linthresh marca el límite entre la zona lineal (cerca de 0) y la
+            # logarítmica: lo fijamos en la potencia de 10 más cercana al valor
+            # mínimo positivo para que las barras chicas no queden pegadas al 0.
+            linthresh = max(1, 10 ** np.floor(np.log10(min_positive)))
+            ax.set_yscale("symlog", linthresh=linthresh)
+
+            # Ticks en potencias de 10 entre el linthresh y el máximo: se ven
+            # parejos y prolijos en vez de saltar entre min/mediana/max.
+            decade_start = int(np.floor(np.log10(linthresh)))
+            decade_end = int(np.ceil(np.log10(max_positive)))
+            tick_values = [0] + [10 ** d for d in range(decade_start, decade_end + 1)]
+            if max_positive not in tick_values:
+                tick_values.append(max_positive)
+            tick_values = sorted(set(tick_values))
+
+            ax.set_yticks(tick_values)
+            ax.set_ylim(0, max_positive * 1.25)
+            ax.yaxis.set_major_formatter(mtick.FuncFormatter(_compact_tick_label))
+            ax.tick_params(axis="y", labelsize=max(8, tick_fontsize - 2))
+
+        # Colocar siempre la leyenda a la derecha; ajustar tamaño para marcadores estrechos
+        needs_more_bottom = any("\n" in d for d in display_labels)
+        bottom_margin = 0.22 if needs_more_bottom else 0.18
+        # Ajustar tamaño de la leyenda según ancho del placeholder (reducido 2 pts)
+        legend_font = 7 if width < 7 else 8
+        legend_bbox = (1.02, 0.5)
+        ax.legend(
             loc="center left",
-            bbox_to_anchor=(1, 0.5),
+            bbox_to_anchor=legend_bbox,
             frameon=False,
-            labelspacing=1.2,
-            fontsize=18,
+            labelspacing=0.6,
+            fontsize=legend_font,
+            ncol=1,
+            borderaxespad=0.5,
         )
+        # Reservar espacio a la derecha para la leyenda y dejar margen inferior para etiquetas X
+        right_margin = 0.78 if width >= 8 else 0.72
+        # para marcadores muy estrechos, ampliar el derecho para que la leyenda no tape el gráfico
+        if width < 5:
+            right_margin = 0.68
+        fig.subplots_adjust(right=right_margin, bottom=bottom_margin)
     elif ctype == "line":
-        for idx, key in enumerate(series_keys):
+        for idx, key in enumerate(visible_series_keys):
             vals = list(chart_info.get(key) or [])
-            vals = vals[:len(labels)]  # truncate if longer
+            vals = vals[:len(labels)]
             if len(vals) < len(labels):
-                vals.extend([None] * (len(labels) - len(vals)))  # pad with None
+                vals.extend([None] * (len(labels) - len(vals)))
 
             label_full = flat_friendly_names.get(key, key.replace("_", " ").capitalize())
-            # Dividir etiquetas largas en varias líneas
-            label = textwrap.fill(label_full, width=22)
+            label = textwrap.fill(label_full, width=20)
 
             color = palette[idx % len(palette)]
-            plt.plot(x, vals, label=label, marker="o", color=color)
+            ax.plot(x, vals, label=label, marker="o", markersize=5, linewidth=2.2, color=color, zorder=3)
 
-        plt.xticks(x, labels, rotation=45, fontsize=16)
-        plt.grid(axis="y", linestyle="-", color="#dcdcdc", linewidth=0.8)
-        plt.legend(loc="best", fontsize=18)
+        ax.spines["top"].set_visible(False)
+        ax.spines["right"].set_visible(False)
+        ax.spines["left"].set_color("#d9d9d9")
+        ax.spines["bottom"].set_color("#d9d9d9")
+
+        ax.set_xticks(x)
+        ax.set_xticklabels(labels, rotation=45, fontsize=tick_fontsize)
+        ax.set_axisbelow(True)
+        ax.grid(axis="y", linestyle="-", color="#ececec", linewidth=0.8, zorder=0)
+        ax.legend(loc="best", fontsize=legend_fontsize)
 
     # Formato eje Y con separador de miles y margen superior
     try:
-        import matplotlib.ticker as mtick
-        ax = plt.gca()
+        if not use_adaptive_scale:
+            # Usar MaxNLocator para obtener ticks "bonitos" (enteros) y
+            # formateador compacto para mostrar K/M de forma consistente.
+            locator = mtick.MaxNLocator(nbins=6, integer=True)
+            ax.yaxis.set_major_locator(locator)
+            ax.yaxis.set_major_formatter(mtick.FuncFormatter(_compact_tick_label))
 
-        # Fuerza a que los ticks sean solo números enteros
-        ax.yaxis.set_major_locator(mtick.MaxNLocator(integer=True))
+            # A veces MaxNLocator puede producir ticks muy cercanos o con
+            # valores repetidos tras el redondeo; deduplicarlos para evitar
+            # etiquetas idénticas (ej. dos '2K').
+            try:
+                raw_ticks = list(ax.get_yticks())
+                # Deduplicar en base a la etiqueta final que se mostrará
+                # (p.ej. '2K'). Así evitamos que dos ticks distintos que
+                # formatean a la misma etiqueta aparezcan repetidos.
+                seen_labels = set()
+                unique_ticks = []
+                for t in raw_ticks:
+                    lbl = _compact_tick_label(t)
+                    if lbl not in seen_labels:
+                        seen_labels.add(lbl)
+                        unique_ticks.append(t)
+                if len(unique_ticks) >= 2:
+                    ax.set_yticks(unique_ticks)
+            except Exception:
+                pass
 
-        # Formateador con separador de miles
-        ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, pos: f"{int(x):,}"))
-
-        # Agregar margen superior: 20% por encima del valor máximo
         current_ylim = ax.get_ylim()
-        ax.set_ylim(current_ylim[0], current_ylim[1] * 1.20)
+        # Asegurar un límite superior razonable y evitar que el tope sea 0
+        new_upper = max(current_ylim[1] * 1.15, 1)
+        ax.set_ylim(current_ylim[0], new_upper)
     except Exception:
         pass
 
-    # Ajusta el layout para asegurar que la leyenda no se corte
-    plt.tight_layout(rect=[0, 0.03, 0.95, 0.97])
+    fig.tight_layout(rect=[0, 0.02, 0.92, 0.95])
     log(
-        f"DEBUG: create_matplotlib_chart - saving chart '{chart_title}' type={ctype} labels={labels} series_keys={series_keys}"
+        f"DEBUG: create_matplotlib_chart - saving chart '{chart_title}' type={ctype} labels={labels} series_keys={visible_series_keys} target_size=({width},{height})"
     )
-    plt.savefig(output_file, dpi=150, transparent=True)
-    plt.close()
+    fig.savefig(output_file, transparent=True, bbox_inches="tight", pad_inches=0.04)
+    plt.close(fig)
 
 
 def _extract_chart_placeholder_index(shape):
@@ -191,7 +348,13 @@ def add_charts(slide, charts, friendly_names, _unused_list=None):
         if not chart_info.get("title") and not chart_info.get("titulo") and name:
             chart_info["title"] = name.replace("_", " ").capitalize()
 
-        # fn = os.path.join(DATA_DIR, f"{name}.png")
         fn = f"/tmp/{name}.png"
-        create_matplotlib_chart(chart_info, friendly_names, fn)
+        target_width = placeholder.width / EMU_PER_INCH
+        target_height = placeholder.height / EMU_PER_INCH
+        create_matplotlib_chart(
+            chart_info,
+            friendly_names,
+            fn,
+            target_size=(target_width, target_height),
+        )
         insert_image_scaled_by_width(slide, placeholder, fn)
