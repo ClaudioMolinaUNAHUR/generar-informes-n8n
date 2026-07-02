@@ -9,6 +9,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     libreoffice-impress \
     libreoffice-writer \
+    libreoffice-calc \
     libreoffice-common \
     fonts-dejavu \
     fonts-liberation \
@@ -24,7 +25,8 @@ RUN pip install --no-cache-dir \
     fastapi \
     uvicorn \
     python-multipart \
-    pydantic
+    pydantic \
+    openpyxl
 
 # Crear usuario 'n8n_user' y preparar directorios
 RUN useradd -m -u 1000 n8n_user && \
