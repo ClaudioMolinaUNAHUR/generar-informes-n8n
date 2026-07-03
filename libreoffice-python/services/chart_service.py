@@ -154,6 +154,15 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file, target_size
         ax.spines["bottom"].set_color("#d9d9d9")
 
         use_adaptive_scale = _should_use_adaptive_scale(chart_title, plotted_series)
+        max_positive = max(
+            (v for values in plotted_series for v in values if v is not None),
+            default=0,
+        )
+        if not use_adaptive_scale and max_positive > 0:
+            # Forzar un límite superior razonable basado en los datos reales
+            # y evitar que Matplotlib agregue un tick 100 innecesario.
+            ax.set_ylim(0, max_positive * 1.15)
+
         # Preparar etiquetas X: acortar o romper para evitar solapamientos
         def _shorten_label(lbl):
             m = re.match(r"^\s*Semana\s*(\d+)\s*$", str(lbl), flags=re.IGNORECASE)
@@ -197,8 +206,27 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file, target_size
             decade_end = int(np.ceil(np.log10(max_positive)))
             tick_values = [0] + [10 ** d for d in range(decade_start, decade_end + 1)]
             if max_positive not in tick_values:
-                tick_values.append(max_positive)
+                # Solo agregamos el tick del valor máximo real si está lo
+                # suficientemente alejado (en escala log) del tick de
+                # potencia de 10 más cercano. Si están muy pegados (p.ej.
+                # 1M y 1.8M) sus etiquetas se superponen visualmente, así
+                # que en ese caso preferimos omitirlo: el límite del eje
+                # ya se extiende por encima del máximo (ver set_ylim abajo).
+                positive_ticks = [t for t in tick_values if t > 0]
+                closest_log_distance = min(
+                    (abs(np.log10(max_positive) - np.log10(t)) for t in positive_ticks),
+                    default=float("inf"),
+                )
+                min_log_gap = 0.2  # ~ratio de 1.6x entre valores
+                if closest_log_distance > min_log_gap:
+                    tick_values.append(max_positive)
             tick_values = sorted(set(tick_values))
+
+            # Limitar la cantidad de ticks para evitar solapamiento visual.
+            max_ticks = 6
+            if len(tick_values) > max_ticks:
+                step = max(1, int(len(tick_values) / max_ticks))
+                tick_values = tick_values[::step]
 
             ax.set_yticks(tick_values)
             ax.set_ylim(0, max_positive * 1.25)
@@ -255,7 +283,9 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file, target_size
         if not use_adaptive_scale:
             # Usar MaxNLocator para obtener ticks "bonitos" (enteros) y
             # formateador compacto para mostrar K/M de forma consistente.
-            locator = mtick.MaxNLocator(nbins=6, integer=True)
+            # Reducimos el número de bins y activamos 'prune' para evitar
+            # que las etiquetas de los extremos se amontonen o se repitan.
+            locator = mtick.MaxNLocator(nbins=5, prune="both", integer=True)
             ax.yaxis.set_major_locator(locator)
             ax.yaxis.set_major_formatter(mtick.FuncFormatter(_compact_tick_label))
 
@@ -286,7 +316,9 @@ def create_matplotlib_chart(chart_info, friendly_names, output_file, target_size
     except Exception:
         pass
 
-    fig.tight_layout(rect=[0, 0.02, 0.92, 0.95])
+    # Bajar el rect top para dejar más espacio a las etiquetas Y finales
+    # y reducir la probabilidad de que se pisen.
+    fig.tight_layout(rect=[0, 0.02, 0.92, 0.92])
     log(
         f"DEBUG: create_matplotlib_chart - saving chart '{chart_title}' type={ctype} labels={labels} series_keys={visible_series_keys} target_size=({width},{height})"
     )

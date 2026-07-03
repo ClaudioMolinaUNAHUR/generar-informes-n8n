@@ -23,7 +23,7 @@
     "wazuh_vuln_totales": {
       "field": "Vulnerabilidades Totales",
       "label": "Vulnerabilidades Totales",
-      "chart": true
+      "chart": false
     }
   },
   "alertas_controles": {

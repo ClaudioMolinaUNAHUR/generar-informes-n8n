@@ -28,6 +28,9 @@ from services.structure_service import (
     procesa_fecha_portada,
 )
 from services.graf_service import generate_grafs   # ← nuevo servicio
+from typing import List
+from services.xlsx_service import convert_xlsx_to_pdf
+from services.merge_service import merge_pdfs_from_bytes
 
 app = FastAPI()
 
@@ -330,6 +333,60 @@ async def generate_pdf_n_emp(request: Request):
         raise HTTPException(
             status_code=500, detail=f"Error generating PDF N Emp: {str(e)}"
         )
+
+
+@app.post("/xlsx-to-pdf")
+async def xlsx_to_pdf_endpoint(
+    file: UploadFile = File(...),
+    range: str = Query("A1:J36", description="Rango de celdas a imprimir, ej: A1:J36"),
+    sheet_name: str = Query(None, description="Nombre de la hoja (opcional, default hoja activa)"),
+):
+    """
+    Convierte un Excel (archivo subido directo, multipart/form-data) a PDF,
+    imprimiendo únicamente el rango de celdas indicado (por defecto A1:J36).
+
+    Ejemplo (curl):
+    curl -X POST "http://host/xlsx-to-pdf?range=A1:J36" -F "file=@archivo.xlsx"
+
+    Respuesta:
+    { "file_name": "abcd1234.pdf" }
+    """
+    try:
+        xlsx_bytes = await file.read()
+        pdf_path = convert_xlsx_to_pdf(xlsx_bytes, cell_range=range, sheet_name=sheet_name)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error convirtiendo xlsx a pdf: {str(e)}")
+
+    return {"file_name": os.path.basename(pdf_path)}
+
+
+@app.post("/merge-pdfs")
+async def merge_pdfs_endpoint(
+    files: List[UploadFile] = File(...),
+    output_name: str = Query(None, description="Nombre del PDF final (opcional)"),
+):
+    """
+    Une varios PDFs (archivos subidos directo, multipart/form-data) en un
+    único archivo, respetando el orden en que llegan.
+
+    Ejemplo (curl):
+    curl -X POST "http://host/merge-pdfs?output_name=informe_final" \
+      -F "files=@parte1.pdf" -F "files=@parte2.pdf" -F "files=@parte3.pdf"
+
+    Respuesta:
+    { "file_name": "informe_final.pdf" }
+    """
+    try:
+        pdfs_bytes = [await f.read() for f in files]
+        pdf_path = merge_pdfs_from_bytes(pdfs_bytes, output_name=output_name)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error uniendo PDFs: {str(e)}")
+
+    return {"file_name": os.path.basename(pdf_path)}
 
 
 @app.get("/health")
