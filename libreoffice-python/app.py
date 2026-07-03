@@ -111,7 +111,14 @@ async def generate_report(request: Request):
         product_type = slide_item["type"]
         slide_content = slide_item.get("slide", {})
         resumen = slide_content.get("resumen", "")
-        producto_slide = generar_slide_producto(resumen, product_type, slide_content, data, logo_stream)
+        producto_slide = generar_slide_producto(
+            resumen=resumen,
+            product_type=product_type,
+            data=slide_content,  # <--- Aquí le envías el diccionario con los datos del producto
+            logo_stream=logo_stream,
+            pie_l=data.get("pie_l", ""), # Opcional: si quieres conservar los pies de página globales
+            pie_r=data.get("pie_r", "")  # Opcional: si quieres conservar los pies de página globales
+        )
         generated_pptx.append(producto_slide)
         content_pptx = generar_contenido_slide(slide_item, data, logo_stream)
         generated_pptx.append(content_pptx)
@@ -138,27 +145,6 @@ async def generate_report(request: Request):
 async def generate_grafs_endpoint(request: Request):
     """
     Genera gráficos de torta y los devuelve como imágenes PNG en base64.
-
-    Acepta el payload como lista (formato n8n) o dict directo.
-    Las claves pueden tener prefijo 'graf_' o 'chart_' indistintamente.
-
-    Body JSON esperado (lista o dict):
-    [
-      {
-        "chart_productos": { "labels": [...], "values": [...] },
-        "chart_horas":     { "labels": [...], "values": [...] },
-                "chart_clientes":  { "labels": [...], "values": [...] },
-                "chart_tickets":   { "labels": [...], "values": [...] }
-      }
-    ]
-
-    Respuesta:
-    {
-        "graf_productos_b64": "<base64 PNG>",
-        "graf_horas_b64":     "<base64 PNG>",
-        "graf_clientes_b64":  "<base64 PNG>",
-        "graf_tickets_b64":   "<base64 PNG>"
-    }
     """
     try:
         raw_body = await request.json()
@@ -266,7 +252,8 @@ async def build_structure(request: Request):
                 chart = json.load(chart_file)
             resume = main.get(f"resume_{product.split('.')[0].lower()}", "")
             slide_data = build_slide_structure(
-                parse_products[product], product, chart, pointer_resumen, resume
+                parse_products[product], product, chart, pointer_resumen, resume, 
+                fecha=mes_actual, logo=main.get("logo", ""), main_data=main  # <-- Agregale esto al final
             )
             file_slide = {
                 "uas": "plantilla_contenido.pptx",
@@ -341,16 +328,6 @@ async def xlsx_to_pdf_endpoint(
     range: str = Query("A1:J36", description="Rango de celdas a imprimir, ej: A1:J36"),
     sheet_name: str = Query(None, description="Nombre de la hoja (opcional, default hoja activa)"),
 ):
-    """
-    Convierte un Excel (archivo subido directo, multipart/form-data) a PDF,
-    imprimiendo únicamente el rango de celdas indicado (por defecto A1:J36).
-
-    Ejemplo (curl):
-    curl -X POST "http://host/xlsx-to-pdf?range=A1:J36" -F "file=@archivo.xlsx"
-
-    Respuesta:
-    { "file_name": "abcd1234.pdf" }
-    """
     try:
         xlsx_bytes = await file.read()
         pdf_path = convert_xlsx_to_pdf(xlsx_bytes, cell_range=range, sheet_name=sheet_name)
@@ -367,17 +344,6 @@ async def merge_pdfs_endpoint(
     files: List[UploadFile] = File(...),
     output_name: str = Query(None, description="Nombre del PDF final (opcional)"),
 ):
-    """
-    Une varios PDFs (archivos subidos directo, multipart/form-data) en un
-    único archivo, respetando el orden en que llegan.
-
-    Ejemplo (curl):
-    curl -X POST "http://host/merge-pdfs?output_name=informe_final" \
-      -F "files=@parte1.pdf" -F "files=@parte2.pdf" -F "files=@parte3.pdf"
-
-    Respuesta:
-    { "file_name": "informe_final.pdf" }
-    """
     try:
         pdfs_bytes = [await f.read() for f in files]
         pdf_path = merge_pdfs_from_bytes(pdfs_bytes, output_name=output_name)
@@ -396,10 +362,6 @@ def health():
 
 @app.get("/files/read")
 async def read_file_endpoint(path: str):
-    """
-    Permite descargar cualquier archivo dentro de la carpeta /data.
-    Ejemplo: GET /files/read?path=charts/chart_uas.json
-    """
     try:
         full_path = get_safe_path(path)
         log(f"🔍 Accediendo a: {full_path} | Existe: {os.path.exists(full_path)} | Es archivo: {os.path.isfile(full_path)}")
@@ -414,10 +376,6 @@ async def read_file_endpoint(path: str):
 
 @app.get("/files/list")
 async def list_files_endpoint(path: str = "."):
-    """
-    Lista los archivos y carpetas dentro de una ruta en /data.
-    Ejemplo: GET /files/list?path=config
-    """
     try:
         full_path = get_safe_path(path)
         if not os.path.exists(full_path):

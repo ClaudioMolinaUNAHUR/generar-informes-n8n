@@ -167,9 +167,11 @@ def _primary_field_name(field_def):
     return candidates[0] if candidates else ""
 
 
-def build_slide_structure(product_data, product_name, chart_definitions, pointer_resume, resume, fecha: datetime = None, logo: str = ""):
+def build_slide_structure(product_data, product_name, chart_definitions, pointer_resume, resume, fecha: datetime = None, logo: str = "", main_data: dict = None):
     product_name_clean = product_name.split(".")[0]
     normalized_product_name = (product_name or "").lower().split(".")[0]
+    
+    # Base de la estructura
     build = {
         "titulo": product_name_clean.upper(),
         "resumen": str(resume or "").strip(),
@@ -181,6 +183,24 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
         "charts": {},
         "desc": str(resume or "").strip(),
     }
+
+    # ── MODIFICACIÓN CLAVE: Mapeo de datos globales ──
+    # Si viene el diccionario principal, arrastramos los campos faltantes a la slide
+    if main_data and isinstance(main_data, dict):
+        campos_globales = [
+            "usu_per", "usu_esp", "solicitudes", "revalida", 
+            "pra", "rs", "pws", "adb", "epm", 
+            "sim", "aca", "ana", "grh", "cad", 
+            "ddv", "snc", "enc", "ecn", "iav", 
+            "isd", "iam",
+            "pdm", "th", "cti", "fdd", "ddw", "tkd",
+            "tra", "pgs", "lgn", "rfg", "alr", "bwl", "rdc", "rdt", "rdp", "rdl",
+            "sca", "pdc", "shv", "cyd", "icc",
+            "work_t", "work_n", "sugerencia_version"
+        ]
+        for campo in campos_globales:
+            if campo in main_data:
+                build[campo] = main_data[campo]
 
     print("[DEBUG] build_slide_structure: product_name=", product_name)
     print("[DEBUG] build_slide_structure: pointer_resume=", pointer_resume)

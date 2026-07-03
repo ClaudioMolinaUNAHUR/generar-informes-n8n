@@ -349,12 +349,8 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     else:
         # Si hay más de 4, usar la plantilla de 4 gráficos
         template_file = "plantilla_contenido_4.pptx"
-    print(f"Generando slide de contenido para {slide_item.get('type')} con {num_charts} gráficos usando plantilla {template_file}")
-
-    prs = Presentation(f"{DATA_DIR}/plantillas/{template_file}")
-
-    # Asumimos que la plantilla tiene una sola diapositiva
-    slide = prs.slides[0]
+    # Delay loading the presentation until we can check work_t/work_n for invgate.asj
+    # Print and Presentation will be created after possible override below.
 
     # Cargamos los nombres amigables para las leyendas de los gráficos
     product_type = slide_item.get("type")
@@ -428,6 +424,24 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     
     # Insertar gráficos y logo ANTES del reemplazo de texto:
     # Esto evita que la lógica de limpieza de replace_placeholders elimine los marcadores {{ph_...}}
+    # Selección final de plantilla (sobrescribe si es necesario)
+    if product_type.lower() == "invgate.asj":
+        wt = str(slide_content.get("work_t", slide_content.get("{{ph_work_t}}", "")) or "").strip()
+        wn = str(
+            slide_content.get(
+                "work_n", slide_content.get("{{ph_work_n}}", slide_content.get("workstation", ""))
+            ) or ""
+        ).strip()
+        if wt or wn:
+            template_file = "plantilla_contenido_work.pptx"
+
+    print(f"Generando slide de contenido para {product_type} con {num_charts} gráficos usando plantilla {template_file}")
+
+    prs = Presentation(f"{DATA_DIR}/plantillas/{template_file}")
+
+    # Asumimos que la plantilla tiene una sola diapositiva
+    slide = prs.slides[0]
+
     if charts:
         add_charts(slide, charts, friendly_names)
 
@@ -584,8 +598,11 @@ def generar_slide_producto(
     if tipo_grupo:
         for campo in campos_por_tipo[tipo_grupo]:
             valor = data.get(campo, "")
+            # No agregar un párrafo extra aquí — el espaciado entre módulos
+            # se controla mediante `space_after` en los párrafos detectados.
+            # Evitar insertar `\u00a0` que genera un salto visual grande.
             if campo not in _CAMPOS_SIN_SEPARADOR and valor:
-                valor = valor + "\n\u00a0"
+                valor = valor
             replacements[f"{{{{ph_{campo}}}}}"] = valor
 
     # Detectar párrafos que originalmente son placeholders de módulos.
@@ -596,6 +613,9 @@ def generar_slide_producto(
         else set()
     )
     module_paragraph_ids = set()
+    # Additionally detect resumen and sugerencia_version paragraph ids
+    resumen_paragraph_ids = set()
+    sugerencia_version_paragraph_ids = set()
     if module_placeholder_keys:
         for shape in slide.shapes:
             if not shape.has_text_frame:
@@ -603,6 +623,12 @@ def generar_slide_producto(
             for p in shape.text_frame.paragraphs:
                 if (p.text or "").strip() in module_placeholder_keys:
                     module_paragraph_ids.add(id(p._p))
+                # Detect resumen placeholders to control spacing later
+                txt = (p.text or "").strip()
+                if txt in ("{{ph_resumen}}", "{{ph_resume}}"):
+                    resumen_paragraph_ids.add(id(p._p))
+                if txt == "{{ph_sugerencia_version}}":
+                    sugerencia_version_paragraph_ids.add(id(p._p))
 
     # Quitar negritas heredadas del template ANTES de reemplazar,
     # para no pisar la negrita que _set_para_with_bold_labels va a aplicar.
@@ -664,16 +690,23 @@ def generar_slide_producto(
             campo_font_size = 11 if base_type in ("axur", "akurtech") else 12
             apply_text_formatting(tf, font_name="Aptos", size=campo_font_size)
 
-    # Espaciado visual entre módulos solo en párrafos de módulos detectados.
-    # No aplica para akurtech.
+    # Espaciado visual entre módulos: usar un espacio pequeño entre módulos.
+    # No aplica para akurtech (mantener 0).
     if module_paragraph_ids:
-        space_after = Pt(0) if base_type == "akurtech" else Pt(16)
+        # Reducir aún más el espacio entre módulos (muy pequeño)
+        space_after = Pt(0) if base_type == "akurtech" else Pt(2)
         for shape in slide.shapes:
             if not shape.has_text_frame:
                 continue
             for p in shape.text_frame.paragraphs:
-                if id(p._p) in module_paragraph_ids:
+                pid = id(p._p)
+                if pid in module_paragraph_ids:
                     p.space_after = space_after
+                    p.space_before = Pt(0)
+                # For resumen and sugerencia_version ensure no extra space between them
+                if pid in resumen_paragraph_ids or pid in sugerencia_version_paragraph_ids:
+                    p.space_after = Pt(0)
+                    p.space_before = Pt(0)
 
     output = f"{DATA_DIR}/pptx-parts/producto_{product_type}.pptx"
     _prepare_output_file(output)
