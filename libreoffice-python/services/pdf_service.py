@@ -660,6 +660,19 @@ def generar_slide_producto(
         key_l = key.lower()
         campo = key_l.replace("{{ph_", "").replace("}}", "")
 
+        # Regla específica para Sonarqube: aplicar Aptos 11.5 y line_spacing=1.5
+        # a todos los campos que no sean 'pie' ni 'logo'.
+        if base_type == "sonarqube" and "pie" not in key_l and "logo" not in key_l:
+            apply_text_formatting(tf, font_name="Aptos", size=11.5, set_line=False)
+            for p in tf.paragraphs:
+                p.line_spacing = 1.5
+                # Igual que el resto de los productos: sin espacio extra
+                # entre resumen y sugerencia_version.
+                if "kpis" in key_l or "sugerencia" in key_l or "resumen" in key_l or "resume" in key_l:
+                    p.space_before = Pt(0)
+                    p.space_after = Pt(0)
+            continue
+
         if "titulo" in key_l:
             apply_text_formatting(tf, font_name="Aptos", size=18)
         elif "sub" in key_l:
@@ -703,10 +716,7 @@ def generar_slide_producto(
                 if pid in module_paragraph_ids:
                     p.space_after = space_after
                     p.space_before = Pt(0)
-                # For resumen and sugerencia_version ensure no extra space between them
-                if pid in resumen_paragraph_ids or pid in sugerencia_version_paragraph_ids:
-                    p.space_after = Pt(0)
-                    p.space_before = Pt(0)
+
 
     output = f"{DATA_DIR}/pptx-parts/producto_{product_type}.pptx"
     _prepare_output_file(output)
