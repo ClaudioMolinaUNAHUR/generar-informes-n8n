@@ -192,7 +192,7 @@ def build_slide_structure(product_data, product_name, chart_definitions, pointer
             "pra", "rs", "pws", "adb", "epm", 
             "sim", "aca", "ana", "grh", "cad", 
             "ddv", "snc", "enc", "ecn", "iav", 
-            "isd", "iam",
+            "isd", "iam", "fim",
             "pdm", "th", "cti", "fdd", "ddw", "tkd",
             "tra", "pgs", "lgn", "rfg", "alr", "bwl", "rdc", "rdt", "rdp", "rdl",
             "sca", "pdc", "shv", "cyd", "icc",

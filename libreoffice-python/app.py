@@ -30,7 +30,12 @@ from services.structure_service import (
 from services.graf_service import generate_grafs   # ← nuevo servicio
 from typing import List
 from services.xlsx_service import convert_xlsx_to_pdf
-from services.merge_service import merge_pdfs_from_bytes
+from services.merge_service import (
+    merge_pdfs_from_bytes,
+    buscar_pdfs_orden_de_pago,
+    merge_pdfs_por_coincidencia,
+    merge_pdfs_from_paths,
+)
 
 app = FastAPI()
 
@@ -368,25 +373,87 @@ async def xlsx_to_pdf_endpoint(
     return {"file_name": os.path.basename(pdf_path)}
 
 
-@app.post("/merge-pdfs")
-async def merge_pdfs_endpoint(
-    files: List[UploadFile] = File(...),
+@app.post("/merge-pdfs-orden-de-pago")
+async def merge_pdfs_orden_de_pago_endpoint(
+    fecha: str = Query(None, description="yyyy-mm o yyyy-mm-dd. Ej: '2024-05' o '2024-05-13'"),
+    nombre: str = Query(None, description="Nombre a buscar (no distingue mayúsculas/minúsculas)"),
     output_name: str = Query(None, description="Nombre del PDF final (opcional)"),
 ):
     """
-    Une varios PDFs (archivos subidos directo, multipart/form-data) en un
-    único archivo, respetando el orden en que llegan.
+    Busca en data/orden-de-pago los PDFs cuyo nombre matchea la fecha y/o
+    el nombre indicados, y los une en un único PDF.
+
+    Los archivos deben tener el formato:
+      yyyy-mm_nombre_resto.pdf
+      yyyy-mm-dd_nombre_resto.pdf
 
     Ejemplo (curl):
-    curl -X POST "http://host/merge-pdfs?output_name=informe_final" \
-      -F "files=@parte1.pdf" -F "files=@parte2.pdf" -F "files=@parte3.pdf"
+    curl -X POST "http://host/merge-pdfs-orden-de-pago?fecha=2024-05&nombre=juan+perez"
+
+    Respuesta:
+    { "file_name": "informe_unido_xxxx.pdf", "archivos_unidos": [...] }
+    """
+    try:
+        archivos = buscar_pdfs_orden_de_pago(fecha=fecha, nombre=nombre)
+        pdf_path = merge_pdfs_por_coincidencia(fecha=fecha, nombre=nombre, output_name=output_name)
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error uniendo PDFs: {str(e)}")
+
+    return {
+        "file_name": os.path.basename(pdf_path),
+        "archivos_unidos": [os.path.basename(a) for a in archivos],
+    }
+
+
+@app.post("/merge-pdfs-by-names")
+async def merge_pdfs_by_names_endpoint(request: Request):
+    """
+    Une PDFs que ya están guardados en /data, especificando directamente
+    la lista de nombres/rutas (en el orden en que se quiere el merge final).
+
+    Las rutas pueden ser:
+      - relativas a DATA_DIR, tal como se guardaron con /files/save
+        (ej: "orden-de-pago/2026-06_S.B. EMPRESA DE SERVICIOS S.R.L._AFIP.pdf")
+      - o absolutas.
+
+    Body JSON esperado:
+    {
+      "archivos": [
+        "orden-de-pago/2026-06_S.B. EMPRESA DE SERVICIOS S.R.L._AFIP.pdf",
+        "orden-de-pago/2026-06_S.B. EMPRESA DE SERVICIOS S.R.L._GALI.pdf"
+      ],
+      "output_name": "informe_final.pdf"   // opcional
+    }
+
+    Ejemplo (curl):
+    curl -X POST "http://host/merge-pdfs-by-names" \
+      -H "Content-Type: application/json" \
+      -d '{"archivos": ["orden-de-pago/2026-06_x_AFIP.pdf", "orden-de-pago/2026-06_x_GALI.pdf"]}'
 
     Respuesta:
     { "file_name": "informe_final.pdf" }
     """
     try:
-        pdfs_bytes = [await f.read() for f in files]
-        pdf_path = merge_pdfs_from_bytes(pdfs_bytes, output_name=output_name)
+        raw_body = await request.json()
+        data = unwrap_n8n_payload_for_generate(raw_body)
+
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=400, detail="El body debe ser un objeto JSON")
+
+        archivos = data.get("archivos")
+        output_name = data.get("output_name")
+
+        if not archivos or not isinstance(archivos, list):
+            raise HTTPException(
+                status_code=422,
+                detail="Debe enviar 'archivos' con una lista no vacía de nombres/rutas de PDFs a unir",
+            )
+
+        pdf_path = merge_pdfs_from_paths(archivos, output_name=output_name)
+    except HTTPException:
+        raise
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
     except Exception as e:

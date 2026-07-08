@@ -546,7 +546,7 @@ def generar_slide_producto(
         "uas": ["usu_per", "usu_esp", "solicitudes", "revalida"],
         "beyondtrust": ["pra", "rs", "pws", "adb", "epm"],
         "whalemate": ["sim", "aca", "ana", "grh", "cad"],
-        "wazuh": ["ddv", "snc", "enc", "ecn", "iav"], # Incluir ambos por compatibilidad
+        "wazuh": ["ddv", "snc", "enc", "fim", "iav"], # Incluir ambos por compatibilidad
         "invgate": ["isd", "iam"],
         "invgate.asj": ["isd", "iam"],
         "axur": ["pdm", "th", "cti", "fdd", "ddw", "tkd"],
