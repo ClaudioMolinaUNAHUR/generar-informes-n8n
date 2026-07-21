@@ -41,30 +41,40 @@ spec:
           mountPath: /app
         - name: tmp-volume
           mountPath: /tmp
+        
+        # 1. STARTUP PROBE: Solo se ejecuta al encender el contenedor. 
+        # Le da hasta 5 minutos (30 x 10s) para iniciar correctamente.
         startupProbe:
           httpGet:
             path: /health
             port: 8000
           failureThreshold: 30
           periodSeconds: 10
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8000
-          initialDelaySeconds: 15
-          periodSeconds: 20
-          timeoutSeconds: 5
+
+        # 2. LIVENESS PROBE: ¡ELIMINADO!
+        # Al no estar presente, Kubernetes JAMÁS reiniciará el Pod 
+        # de forma imprevista durante una conversión larga o costosa.
+
+        # 3. READINESS PROBE: Sigue activo pero muy relajado.
+        # Si el pod se satura procesando, se retira temporalmente del balanceador
+        # para que no le lleguen nuevas peticiones de n8n hasta que termine, 
+        # pero mantiene el proceso actual vivo en paz.
         readinessProbe:
           httpGet:
             path: /health
             port: 8000
-          initialDelaySeconds: 5
-          periodSeconds: 10
-          timeoutSeconds: 5
+          initialDelaySeconds: 15
+          periodSeconds: 30
+          timeoutSeconds: 20
+          failureThreshold: 5
+
+        # 4. RECURSOS ENFOCADOS EN RENDIMIENTO:
+        # Asignamos 2 vCPUs dedicadas y elevamos la memoria a 4Gi (4096Mi)
+        # para evitar cuellos de botella y errores de Out-Of-Memory (OOM).
         resources:
           limits:
-            cpu: "1.0"
-            memory: "1024Mi"
+            cpu: "2.0"
+            memory: "4096Mi"
           requests:
-            cpu: "0.5"
-            memory: "512Mi"
+            cpu: "1.0"
+            memory: "2048Mi"
