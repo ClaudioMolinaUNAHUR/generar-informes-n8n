@@ -48,18 +48,28 @@ def normalize_suggestion_text(text, max_chars=200, line_width=46):
     if not raw:
         return " "
 
-    # Evita bloques visualmente amontonados en una sola línea.
+    raw = raw.replace("\r\n", "\n").replace("\r", "\n").replace("\\n", "\n")
+    lines = raw.split("\n")
+
     wrapped_lines = []
-    for line in raw.replace("\\n", "\n").splitlines():
-        line = line.strip()
-        if not line:
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            # Preserve intentional blank lines between suggestion blocks.
+            if not wrapped_lines or wrapped_lines[-1] != "":
+                wrapped_lines.append("")
             continue
-        bullet = line.startswith("•") or line.startswith("-")
-        content = line.lstrip("•- ").strip() if bullet else line
+        bullet = stripped.startswith("•") or stripped.startswith("-")
+        content = stripped.lstrip("•- ").strip() if bullet else stripped
         if not content:
             continue
         if bullet:
-            wrapped = textwrap.fill(content, width=line_width, initial_indent="• ", subsequent_indent="  ")
+            wrapped = textwrap.fill(
+                content,
+                width=line_width,
+                initial_indent="• ",
+                subsequent_indent="  ",
+            )
         else:
             wrapped = textwrap.fill(content, width=line_width)
         wrapped_lines.append(wrapped)
@@ -612,6 +622,10 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     if num_charts == 0:
         # No crear la hoja si no hay gráficos
         return None
+
+    product_type = str(slide_item.get("type", "")).strip().lower()
+    if product_type == "sonarqube":
+        template_file = "plantilla_contenido_sonarqube.pptx"
     elif num_charts == 1:
         template_file = "plantilla_contenido1.pptx"
     elif num_charts == 2:

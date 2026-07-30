@@ -26,6 +26,22 @@ def _prepare_output_file(path):
         os.remove(path)
 
 
+def apply_axur_placeholder_formatting(text_frame, key, product_type):
+    """Aplica formato Aptos 10 a placeholders de Axur, incluyendo módulos y resumen."""
+    key_l = (key or "").lower()
+    if product_type.lower() != "axur":
+        return
+
+    if "titulo" in key_l or "sub" in key_l or "pie" in key_l:
+        return
+
+    if "resumen" in key_l or "resume" in key_l or "sugerencia" in key_l or "ph_pdm" in key_l or "ph_th" in key_l or "ph_cti" in key_l or "ph_fdd" in key_l or "ph_ddw" in key_l or "ph_tkd" in key_l:
+        for paragraph in text_frame.paragraphs:
+            for run in paragraph.runs:
+                run.font.name = "Aptos"
+                run.font.size = Pt(10)
+
+
 def _get_suggestion_value(slide_content, index):
     singular_key = f"sugerencia_{index}"
     plural_key = f"sugerencias_{index}"
@@ -340,6 +356,10 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     if num_charts == 0:
         # No crear la hoja si no hay gráficos
         return None
+
+    product_type = str(slide_item.get("type", "")).strip().lower()
+    if product_type == "sonarqube":
+        template_file = "plantilla_contenido_sonarqube.pptx"
     elif num_charts == 1:
         template_file = "plantilla_contenido_1.pptx"
     elif num_charts == 2:
@@ -353,7 +373,7 @@ def generar_contenido_slide(slide_item, data, logo_stream):
     # Print and Presentation will be created after possible override below.
 
     # Cargamos los nombres amigables para las leyendas de los gráficos
-    product_type = slide_item.get("type")
+    raw_product_type = slide_item.get("type")
     friendly_names = {}
     try:
         with open(
@@ -672,6 +692,8 @@ def generar_slide_producto(
                     p.space_before = Pt(0)
                     p.space_after = Pt(0)
             continue
+
+        apply_axur_placeholder_formatting(tf, key, product_type=base_type)
 
         if "titulo" in key_l:
             apply_text_formatting(tf, font_name="Aptos", size=18)
