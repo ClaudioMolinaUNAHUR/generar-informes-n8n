@@ -427,16 +427,16 @@ def generar_contenido_slide(slide_item, data, logo_stream):
         "{{ph_work_n}}": work_n,
         # Sugerencias (opcionales, vacío si no vienen)
         "{{ph_sugerencia_1}}": normalize_suggestion_text(
-            _get_suggestion_value(slide_content, 1), 200
+            _get_suggestion_value(slide_content, 1), 600
         ),
         "{{ph_sugerencia_2}}": normalize_suggestion_text(
-            _get_suggestion_value(slide_content, 2), 200
+            _get_suggestion_value(slide_content, 2), 600
         ),
         "{{ph_sugerencia_3}}": normalize_suggestion_text(
-            _get_suggestion_value(slide_content, 3), 200
+            _get_suggestion_value(slide_content, 3), 600
         ),
         "{{ph_sugerencia_4}}": normalize_suggestion_text(
-            _get_suggestion_value(slide_content, 4), 200
+            _get_suggestion_value(slide_content, 4), 600
         ),
     }
     print(f"Reemplazos para slide de contenido ({product_type}): {replacements}")

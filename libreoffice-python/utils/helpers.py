@@ -53,22 +53,27 @@ def normalize_suggestion_text(text, max_chars=200, line_width=46):
     if not raw:
         return " "
 
-    # Evita bloques visualmente amontonados en una sola línea.
+    raw = raw.replace("\r\n", "\n").replace("\r", "\n").replace("\\n", "\n")
+    lines = raw.split("\n")
+
     wrapped_lines = []
-    for line in raw.replace("\\n", "\n").splitlines():
-        line = line.strip()
-        if not line:
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            # Preserve intentional blank lines between suggestion blocks.
+            if not wrapped_lines or wrapped_lines[-1] != "":
+                wrapped_lines.append("")
             continue
-        bullet = line.startswith("•") or line.startswith("-")
-        content = line.lstrip("•- ").strip() if bullet else line
+        bullet = stripped.startswith("•") or stripped.startswith("-")
+        content = stripped.lstrip("•- ").strip() if bullet else stripped
         if not content:
             continue
-        if bullet:
-            wrapped = textwrap.fill(
-                content, width=line_width, initial_indent="• ", subsequent_indent="  "
-            )
-        else:
-            wrapped = textwrap.fill(content, width=line_width)
+        # No se envuelve manualmente el texto (textwrap.fill insertaba \n
+        # cada `line_width` caracteres, generando párrafos/saltos de línea
+        # que no existían en el texto original). El ajuste visual del ancho
+        # de línea lo hace PowerPoint solo, gracias a word_wrap=True
+        # (ver apply_text_formatting).
+        wrapped = f"• {content}" if bullet else content
         wrapped_lines.append(wrapped)
 
     body = "\n".join(wrapped_lines) if wrapped_lines else " "
